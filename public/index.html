@@ -237,6 +237,17 @@
       <div class="prize"><span>הפרס הגדול</span><div id="prize">פרס שווה במיוחד 🎁</div></div>
     </header>
 
+    <!-- בדיקת כרטיסים — לחברים שכבר נרשמו -->
+    <div class="check-card" id="check-card">
+      <div class="check-title">🎟️ כמה כרטיסים יש לי?</div>
+      <p class="check-sub">כבר נרשמתם? הכניסו מספר טלפון לבדיקה</p>
+      <div class="ref-link-wrap">
+        <input type="tel" id="check-phone" class="ref-link-input" placeholder="050-0000000" inputmode="numeric" style="color:var(--ink);background:#fff;border:1px solid var(--line)" />
+        <button class="copy-btn" id="check-btn">בדיקה</button>
+      </div>
+      <div id="check-result" style="margin-top:14px;min-height:20px"></div>
+    </div>
+
     <section id="flow">
       <div class="steps">
         <!-- שלב 1 -->
@@ -309,17 +320,6 @@
         <button class="share-btn" id="share-btn">📤 שתפו בסטטוס וואטסאפ</button>
       </div>
     </section>
-
-    <!-- בדיקת כרטיסים -->
-    <div class="check-card" id="check-card">
-      <div class="check-title">🎟️ כמה כרטיסים יש לי?</div>
-      <p class="check-sub">הזינו את מספר הטלפון שנרשמתם איתו</p>
-      <div class="ref-link-wrap">
-        <input type="tel" id="check-phone" class="ref-link-input" placeholder="050-0000000" inputmode="numeric" style="color:var(--ink);background:#fff;border:1px solid var(--line)" />
-        <button class="copy-btn" id="check-btn">בדיקה</button>
-      </div>
-      <div id="check-result" style="margin-top:14px;min-height:20px"></div>
-    </div>
 
     <footer>מופעל באמצעות מערכת הגרלות עצמאית · ללא חיבור לוואטסאפ</footer>
   </div>
