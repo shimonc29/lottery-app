@@ -18,7 +18,7 @@ const CONFIG = {
   clientPhone:   process.env.CLIENT_PHONE   || "972586904058",
   contactPrefix: process.env.CONTACT_PREFIX || "הגרלה",
   adminUser:     process.env.ADMIN_USER     || "admin",
-  adminPassword: process.env.ADMIN_PASSWORD || "Raffle2024!",
+  adminPassword: process.env.ADMIN_PASSWORD || "admin1234",
 };
 
 try {
