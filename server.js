@@ -98,6 +98,16 @@ app.get("/api/referrals/:phone", (req, res) => {
   res.json({ count });
 });
 
+// בדיקת כרטיסים ציבורית לפי טלפון
+app.get("/api/tickets/:phone", (req, res) => {
+  const phone = normalizePhone(req.params.phone);
+  const entries = readEntries();
+  const me = entries.find(e => e.phone === phone);
+  if (!me) return res.json({ found: false });
+  const referrals = entries.filter(e => e.referredBy === phone).length;
+  res.json({ found: true, name: me.name, tickets: 1 + referrals, referrals });
+});
+
 app.get("/contact.vcf", (req, res) => {
   const vcf = [
     "BEGIN:VCARD", "VERSION:3.0",
@@ -158,7 +168,20 @@ app.delete("/admin/api/entries/:id", auth, (req, res) => {
 app.get("/admin/api/draw", auth, (req, res) => {
   const entries = readEntries();
   if (!entries.length) return res.json({ winner: null });
-  res.json({ winner: entries[Math.floor(Math.random() * entries.length)] });
+
+  // בניית "קלפי הגרלה" משוקללים — כרטיס אחד לכל הפניה
+  const refMap = {};
+  for (const e of entries) {
+    if (e.referredBy) refMap[e.referredBy] = (refMap[e.referredBy] || 0) + 1;
+  }
+  const pool = [];
+  for (const e of entries) {
+    const tickets = 1 + (refMap[e.phone] || 0);
+    for (let i = 0; i < tickets; i++) pool.push(e);
+  }
+  const winner = pool[Math.floor(Math.random() * pool.length)];
+  const winnerTickets = 1 + (refMap[winner.phone] || 0);
+  res.json({ winner: { ...winner, tickets: winnerTickets } });
 });
 
 app.get("/admin/api/settings", auth, (req, res) => {

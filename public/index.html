@@ -205,6 +205,25 @@
     cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px;
   }
 
+  /* ---- Check tickets ---- */
+  .check-card {
+    margin-top: 18px;
+    background: #fff;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 20px 18px;
+  }
+  .check-title { font-family: "Suez One", serif; font-size: 20px; color: var(--forest); margin-bottom: 4px; }
+  .check-sub { font-size: 13px; color: #5d6b62; margin-bottom: 14px; }
+  .check-result-box {
+    background: var(--cream-2); border-radius: 12px; padding: 14px 16px;
+    text-align: center;
+  }
+  .check-result-box .big { font-family: "Suez One", serif; font-size: 36px; color: var(--forest); }
+  .check-result-box .lbl { font-size: 13px; color: #5d6b62; margin-top: 2px; }
+  .check-result-box .refs { font-size: 13px; color: var(--forest); font-weight: 700; margin-top: 6px; }
+  .check-err { color: var(--red); font-size: 14px; font-weight: 700; text-align: center; }
+
   footer { text-align: center; margin-top: 26px; font-size: 12px; color: #9a9482; }
   .confetti { position: fixed; top: -10px; width: 9px; height: 14px; opacity: 0; z-index: 50; border-radius: 2px; }
 </style>
@@ -290,6 +309,17 @@
         <button class="share-btn" id="share-btn">📤 שתפו בסטטוס וואטסאפ</button>
       </div>
     </section>
+
+    <!-- בדיקת כרטיסים -->
+    <div class="check-card" id="check-card">
+      <div class="check-title">🎟️ כמה כרטיסים יש לי?</div>
+      <p class="check-sub">הזינו את מספר הטלפון שנרשמתם איתו</p>
+      <div class="ref-link-wrap">
+        <input type="tel" id="check-phone" class="ref-link-input" placeholder="050-0000000" inputmode="numeric" style="color:var(--ink);background:#fff;border:1px solid var(--line)" />
+        <button class="copy-btn" id="check-btn">בדיקה</button>
+      </div>
+      <div id="check-result" style="margin-top:14px;min-height:20px"></div>
+    </div>
 
     <footer>מופעל באמצעות מערכת הגרלות עצמאית · ללא חיבור לוואטסאפ</footer>
   </div>
@@ -395,6 +425,31 @@
       window.open("https://wa.me/?text=" + text, "_blank");
     });
   }
+
+  // בדיקת כרטיסים ציבורית
+  document.getElementById("check-btn").addEventListener("click", async () => {
+    const phone = document.getElementById("check-phone").value.trim();
+    const res = document.getElementById("check-result");
+    if (!phone) { res.innerHTML = '<div class="check-err">נא להזין מספר טלפון</div>'; return; }
+    try {
+      const r = await fetch("/api/tickets/" + encodeURIComponent(phone));
+      const data = await r.json();
+      if (!data.found) {
+        res.innerHTML = '<div class="check-err">המספר לא נמצא ברשימת הנרשמים</div>';
+      } else {
+        res.innerHTML = `<div class="check-result-box">
+          <div class="big">${data.tickets} 🎟️</div>
+          <div class="lbl">כרטיסי הגרלה, ${data.name}</div>
+          <div class="refs">${data.referrals > 0 ? `הבאתם ${data.referrals} חברים — כל הכבוד! 🙌` : 'שתפו חברים וצברו כרטיסים נוספים'}</div>
+        </div>`;
+      }
+    } catch {
+      res.innerHTML = '<div class="check-err">שגיאה, נסו שוב</div>';
+    }
+  });
+  document.getElementById("check-phone").addEventListener("keydown", e => {
+    if (e.key === "Enter") document.getElementById("check-btn").click();
+  });
 
   function launchConfetti() {
     const colors = ["#d9a441", "#14503a", "#c0492f", "#efe6d0"];

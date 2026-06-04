@@ -122,6 +122,7 @@
         <div class="lbl">🏆 הזוכה בהגרלה</div>
         <div class="w-name" id="wName"></div>
         <div class="w-phone" id="wPhone"></div>
+        <div style="margin-top:8px;font-size:14px;color:var(--gold)" id="wTickets"></div>
       </div>
 
       <table>
@@ -238,6 +239,7 @@
     if (!winner) { box.classList.remove("show"); alert("אין משתתפים בהגרלה"); return; }
     document.getElementById("wName").textContent = winner.name;
     document.getElementById("wPhone").textContent = "+" + winner.phone;
+    document.getElementById("wTickets").textContent = `🎟️ ${winner.tickets || 1} כרטיסים`;
     box.classList.remove("show"); void box.offsetWidth; box.classList.add("show");
     box.scrollIntoView({ behavior: "smooth", block: "center" });
   });
