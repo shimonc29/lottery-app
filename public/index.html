@@ -390,9 +390,7 @@
     // כפתור שיתוף
     document.getElementById("share-btn").addEventListener("click", () => {
       const text = encodeURIComponent(
-        "🎉 הצטרפו להגרלה של " + (CFG.businessName || "העסק שלנו") +
-        " — " + (CFG.prizeText || "פרס מדהים") +
-        "!\nלחצו כאן להצטרפות: " + refUrl
+        "להשתתפות בהגרלה הגדולה של " + (CFG.businessName || "העסק שלנו") + " לחצו כאן\n" + refUrl
       );
       window.open("https://wa.me/?text=" + text, "_blank");
     });
