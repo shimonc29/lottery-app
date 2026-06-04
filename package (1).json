@@ -1,0 +1,12 @@
+{
+  "name": "raffle-app",
+  "version": "1.0.0",
+  "description": "דף הגרלה + דאשבורד ניהול - ללא חיבור לוואטסאפ",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2"
+  }
+}

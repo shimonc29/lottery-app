@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(Set-Location \"C:\\\\Users\\\\Me\\\\קלוד\\\\Lottery software\"; $env:PORT = \"3000\"; Start-Process -NoNewWindow -FilePath \"node\" -ArgumentList \"server.js\" -PassThru | Select-Object Id; Start-Sleep 2; Invoke-WebRequest http://localhost:3000 -UseBasicParsing | Select-Object StatusCode)",
+      "PowerShell(Invoke-WebRequest http://localhost:3000 -UseBasicParsing)",
+      "PowerShell(Invoke-WebRequest http://localhost:3000/api/config -UseBasicParsing)"
+    ]
+  }
+}

@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>ניהול הגרלה</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=Suez+One&family=Assistant:wght@400;600;700;800&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --bg: #10231a; --panel: #16312443; --card: #1b3a2b; --line: #2c5240;
+    --cream: #f0ead8; --muted: #93a89a; --gold: #d9a441; --forest: #2f7a58; --red: #c0492f;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: "Assistant", sans-serif; background: var(--bg); color: var(--cream);
+    min-height: 100vh; padding: 24px 16px 60px;
+    background-image: radial-gradient(circle at 90% 0%, rgba(217,164,65,.10), transparent 45%);
+  }
+  .wrap { max-width: 820px; margin: 0 auto; }
+  header { display: flex; align-items: baseline; justify-content: space-between; flex-wrap: wrap; gap: 8px; margin-bottom: 20px; }
+  h1 { font-family: "Suez One", serif; font-size: 28px; color: #fff; }
+  .pill { background: var(--gold); color: #10231a; font-weight: 800; padding: 4px 12px; border-radius: 999px; font-size: 13px; }
+
+  .stats { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-bottom: 18px; }
+  .stat { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 16px 18px; }
+  .stat .n { font-family: "Suez One", serif; font-size: 34px; color: var(--gold); line-height: 1; }
+  .stat .l { font-size: 13px; color: var(--muted); margin-top: 4px; }
+
+  .actions { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 18px; }
+  .btn {
+    border: 1px solid var(--line); background: var(--card); color: var(--cream);
+    border-radius: 12px; padding: 11px 16px; font-family: "Assistant"; font-weight: 700; font-size: 14px;
+    cursor: pointer; text-decoration: none; display: inline-flex; align-items: center; gap: 7px;
+    transition: transform .1s, border-color .2s, background .2s;
+  }
+  .btn:hover { border-color: var(--forest); }
+  .btn:active { transform: translateY(2px); }
+  .btn.primary { background: var(--gold); color: #10231a; border-color: var(--gold); }
+  .btn.draw { background: var(--forest); border-color: var(--forest); color: #fff; }
+
+  .draw-result {
+    display: none; margin-bottom: 18px; padding: 18px 20px; border-radius: 16px;
+    background: linear-gradient(135deg, #1f5a40, #14503a); border: 1px solid var(--gold);
+    text-align: center;
+  }
+  .draw-result.show { display: block; animation: pop .4s ease; }
+  .draw-result .lbl { font-size: 13px; color: var(--gold); font-weight: 800; letter-spacing: .5px; }
+  .draw-result .w-name { font-family: "Suez One", serif; font-size: 30px; color: #fff; margin: 4px 0; }
+  .draw-result .w-phone { font-size: 16px; color: var(--cream); direction: ltr; }
+  @keyframes pop { from { transform: scale(.95); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+
+  table { width: 100%; border-collapse: collapse; background: var(--card); border-radius: 16px; overflow: hidden; }
+  th, td { padding: 13px 14px; text-align: right; font-size: 14px; border-bottom: 1px solid var(--line); }
+  th { background: #143123; color: var(--muted); font-weight: 700; font-size: 12.5px; }
+  td.phone { direction: ltr; text-align: right; font-variant-numeric: tabular-nums; }
+  tr:last-child td { border-bottom: none; }
+  .del { background: none; border: none; color: var(--red); cursor: pointer; font-size: 18px; opacity: .7; }
+  .del:hover { opacity: 1; }
+  .empty { text-align: center; color: var(--muted); padding: 40px; }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <h1>ניהול הגרלה</h1>
+      <span class="pill">אזור מנהל</span>
+    </header>
+
+    <div class="stats">
+      <div class="stat"><div class="n" id="count">0</div><div class="l">משתתפים בהגרלה</div></div>
+      <div class="stat"><div class="n" id="today">0</div><div class="l">נרשמו היום</div></div>
+    </div>
+
+    <div class="actions">
+      <button class="btn draw" id="draw">🎲 הגרלת זוכה</button>
+      <a class="btn primary" href="/admin/export.vcf">📇 ייצוא אנשי קשר (vCard)</a>
+      <a class="btn" href="/admin/export.csv">📊 ייצוא לאקסל (CSV)</a>
+      <button class="btn" id="refresh">↻ רענון</button>
+    </div>
+
+    <div class="draw-result" id="drawResult">
+      <div class="lbl">🏆 הזוכה בהגרלה</div>
+      <div class="w-name" id="wName"></div>
+      <div class="w-phone" id="wPhone"></div>
+    </div>
+
+    <table>
+      <thead><tr><th>שם</th><th>טלפון</th><th>תאריך הרשמה</th><th></th></tr></thead>
+      <tbody id="rows"></tbody>
+    </table>
+    <div class="empty" id="empty" style="display:none">עדיין אין משתתפים</div>
+  </div>
+
+<script>
+  async function load() {
+    const res = await fetch("/admin/api/entries");
+    const list = await res.json();
+    document.getElementById("count").textContent = list.length;
+    const todayStr = new Date().toDateString();
+    document.getElementById("today").textContent =
+      list.filter(e => new Date(e.createdAt).toDateString() === todayStr).length;
+
+    const rows = document.getElementById("rows");
+    rows.innerHTML = "";
+    document.getElementById("empty").style.display = list.length ? "none" : "block";
+
+    for (const e of list) {
+      const tr = document.createElement("tr");
+      const d = new Date(e.createdAt).toLocaleString("he-IL", { dateStyle: "short", timeStyle: "short" });
+      tr.innerHTML = `
+        <td>${escapeHtml(e.name)}</td>
+        <td class="phone">+${e.phone}</td>
+        <td>${d}</td>
+        <td><button class="del" title="מחיקה" data-id="${e.id}">🗑</button></td>`;
+      rows.appendChild(tr);
+    }
+    document.querySelectorAll(".del").forEach(b =>
+      b.addEventListener("click", async () => {
+        if (!confirm("למחוק את המשתתף?")) return;
+        await fetch("/admin/api/entries/" + b.dataset.id, { method: "DELETE" });
+        load();
+      })
+    );
+  }
+
+  document.getElementById("draw").addEventListener("click", async () => {
+    const res = await fetch("/admin/api/draw");
+    const { winner } = await res.json();
+    const box = document.getElementById("drawResult");
+    if (!winner) { box.classList.remove("show"); alert("אין משתתפים בהגרלה"); return; }
+    document.getElementById("wName").textContent = winner.name;
+    document.getElementById("wPhone").textContent = "+" + winner.phone;
+    box.classList.remove("show"); void box.offsetWidth; box.classList.add("show");
+    box.scrollIntoView({ behavior: "smooth", block: "center" });
+  });
+
+  document.getElementById("refresh").addEventListener("click", load);
+  function escapeHtml(s){ return String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
+  load();
+</script>
+</body>
+</html>

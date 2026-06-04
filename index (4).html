@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>הגרלה גדולה</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Suez+One&family=Assistant:wght@400;600;700;800&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --cream: #f7f1e3;
+    --cream-2: #efe6d0;
+    --ink: #1f3328;
+    --forest: #14503a;
+    --forest-2: #0e3b2a;
+    --gold: #d9a441;
+    --gold-deep: #b9842a;
+    --red: #c0492f;
+    --line: #e2d7bd;
+    --radius: 20px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { background: var(--cream); }
+  body {
+    font-family: "Assistant", sans-serif;
+    color: var(--ink);
+    line-height: 1.55;
+    min-height: 100vh;
+    background-image:
+      radial-gradient(circle at 12% 8%, rgba(217,164,65,.12), transparent 45%),
+      radial-gradient(circle at 90% 0%, rgba(20,80,58,.10), transparent 40%);
+  }
+  .wrap { max-width: 560px; margin: 0 auto; padding: 22px 18px 60px; }
+
+  /* ---- Hero ---- */
+  .hero {
+    position: relative;
+    background: linear-gradient(160deg, var(--forest), var(--forest-2));
+    color: var(--cream);
+    border-radius: var(--radius);
+    padding: 34px 26px 30px;
+    text-align: center;
+    overflow: hidden;
+    box-shadow: 0 18px 40px -18px rgba(14,59,42,.6);
+  }
+  .hero::before {
+    content: "";
+    position: absolute; inset: 0;
+    background-image: radial-gradient(rgba(247,241,227,.06) 1.4px, transparent 1.4px);
+    background-size: 16px 16px;
+    opacity: .6;
+  }
+  .badge {
+    position: relative;
+    display: inline-flex; align-items: center; gap: 7px;
+    background: var(--gold);
+    color: var(--forest-2);
+    font-weight: 800; font-size: 13px;
+    padding: 6px 14px; border-radius: 999px;
+    letter-spacing: .3px;
+    box-shadow: 0 4px 0 var(--gold-deep);
+  }
+  .hero h1 {
+    position: relative;
+    font-family: "Suez One", serif;
+    font-size: clamp(34px, 9vw, 48px);
+    line-height: 1.02;
+    margin: 18px 0 6px;
+    color: #fff;
+    text-shadow: 0 2px 0 rgba(0,0,0,.18);
+  }
+  .hero .biz { position: relative; font-weight: 700; opacity: .92; font-size: 17px; }
+  .prize {
+    position: relative;
+    margin: 20px auto 4px; max-width: 420px;
+    background: rgba(247,241,227,.10);
+    border: 1px dashed rgba(217,164,65,.65);
+    border-radius: 14px;
+    padding: 14px 16px;
+    font-size: 19px; font-weight: 700;
+  }
+  .prize span { display: block; font-size: 12.5px; font-weight: 600; opacity: .8; margin-bottom: 2px; }
+
+  /* ---- Steps ---- */
+  .steps { margin-top: 26px; display: grid; gap: 14px; }
+  .step {
+    background: #fff;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 18px 18px 18px 18px;
+    display: grid;
+    grid-template-columns: 46px 1fr;
+    gap: 14px; align-items: center;
+    transition: border-color .2s, box-shadow .2s, transform .15s;
+  }
+  .step.done { border-color: var(--forest); box-shadow: 0 6px 18px -10px rgba(20,80,58,.4); }
+  .num {
+    width: 46px; height: 46px; border-radius: 14px;
+    background: var(--cream-2); color: var(--forest);
+    font-family: "Suez One", serif; font-size: 22px;
+    display: grid; place-items: center;
+    transition: background .25s, color .25s;
+  }
+  .step.done .num { background: var(--forest); color: var(--gold); }
+  .step .title { font-weight: 800; font-size: 17px; margin-bottom: 2px; }
+  .step .sub { font-size: 13.5px; color: #5d6b62; }
+  .step-btn {
+    grid-column: 1 / -1;
+    margin-top: 12px;
+    display: inline-flex; justify-content: center; align-items: center; gap: 8px;
+    width: 100%;
+    background: var(--forest); color: #fff;
+    border: none; border-radius: 13px;
+    padding: 13px; font-family: "Assistant"; font-weight: 800; font-size: 16px;
+    cursor: pointer; text-decoration: none;
+    box-shadow: 0 4px 0 var(--forest-2);
+    transition: transform .12s, box-shadow .12s, background .2s;
+  }
+  .step-btn:active { transform: translateY(3px); box-shadow: 0 1px 0 var(--forest-2); }
+  .step.done .step-btn { background: #4d6b5b; box-shadow: 0 4px 0 #3a5446; }
+  .check { font-size: 13px; font-weight: 800; color: var(--forest); display: none; align-items: center; gap: 5px; }
+  .step.done .check { display: inline-flex; }
+
+  /* ---- Form ---- */
+  .form-card {
+    margin-top: 18px;
+    background: linear-gradient(160deg, #fff, var(--cream));
+    border: 2px solid var(--gold);
+    border-radius: var(--radius);
+    padding: 22px 20px;
+    position: relative;
+  }
+  .form-card h2 { font-family: "Suez One", serif; font-size: 24px; color: var(--forest); margin-bottom: 4px; }
+  .form-card p.lead { font-size: 14px; color: #5d6b62; margin-bottom: 16px; }
+  .field { margin-bottom: 13px; }
+  .field label { display: block; font-weight: 700; font-size: 14px; margin-bottom: 5px; }
+  .field input[type=text], .field input[type=tel] {
+    width: 100%; padding: 13px 14px; font-family: "Assistant"; font-size: 16px;
+    border: 1px solid var(--line); border-radius: 12px; background: #fff; color: var(--ink);
+  }
+  .field input:focus { outline: none; border-color: var(--forest); box-shadow: 0 0 0 3px rgba(20,80,58,.12); }
+  .consent { display: flex; gap: 9px; align-items: flex-start; font-size: 13px; color: #5d6b62; margin: 6px 0 16px; }
+  .consent input { margin-top: 3px; width: 18px; height: 18px; accent-color: var(--forest); }
+  .submit {
+    width: 100%; padding: 16px; border: none; border-radius: 14px;
+    background: var(--gold); color: var(--forest-2);
+    font-family: "Suez One", serif; font-size: 20px; cursor: pointer;
+    box-shadow: 0 5px 0 var(--gold-deep);
+    transition: transform .12s, box-shadow .12s, filter .2s;
+  }
+  .submit:active { transform: translateY(4px); box-shadow: 0 1px 0 var(--gold-deep); }
+  .submit:disabled { filter: grayscale(.7) opacity(.6); cursor: not-allowed; box-shadow: 0 5px 0 #bbb; }
+  .hint { text-align: center; font-size: 12.5px; color: var(--red); margin-top: 10px; min-height: 16px; font-weight: 700; }
+
+  /* ---- Success ---- */
+  .success { text-align: center; padding: 24px 8px; display: none; }
+  .success.show { display: block; animation: pop .4s ease; }
+  .success .tick {
+    width: 84px; height: 84px; margin: 0 auto 14px; border-radius: 50%;
+    background: var(--forest); color: var(--gold);
+    display: grid; place-items: center; font-size: 44px;
+    box-shadow: 0 10px 24px -10px rgba(20,80,58,.6);
+  }
+  .success h2 { font-family: "Suez One", serif; font-size: 30px; color: var(--forest); }
+  .success p { color: #5d6b62; margin-top: 6px; font-size: 15px; }
+  @keyframes pop { from { transform: scale(.9); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+
+  footer { text-align: center; margin-top: 26px; font-size: 12px; color: #9a9482; }
+  .confetti { position: fixed; top: -10px; width: 9px; height: 14px; opacity: 0; z-index: 50; border-radius: 2px; }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <header class="hero">
+      <span class="badge">🎉 הגרלה גדולה</span>
+      <h1 id="title">הצטרפו להגרלה</h1>
+      <div class="biz" id="biz">העסק שלי</div>
+      <div class="prize"><span>הפרס הגדול</span><div id="prize">פרס שווה במיוחד 🎁</div></div>
+    </header>
+
+    <section id="flow">
+      <div class="steps">
+        <!-- שלב 1 -->
+        <div class="step" id="step1">
+          <div class="num">1</div>
+          <div>
+            <div class="title">עקבו אחרי הערוץ 📢</div>
+            <div class="sub">ככה תהיו מעודכנים בכל ההגרלות והעדכונים</div>
+          </div>
+          <a class="step-btn" id="btn-channel" target="_blank" rel="noopener">מעבר לערוץ</a>
+          <span class="check">✓ סומן כבוצע</span>
+        </div>
+
+        <!-- שלב 2 -->
+        <div class="step" id="step2">
+          <div class="num">2</div>
+          <div>
+            <div class="title">שמרו את המספר 📇</div>
+            <div class="sub">לחיצה אחת — והמספר נשמר אצלכם באנשי הקשר</div>
+          </div>
+          <a class="step-btn" id="btn-contact" href="/contact.vcf">שמירת המספר</a>
+          <span class="check">✓ סומן כבוצע</span>
+        </div>
+
+        <!-- שלב 3 -->
+        <div class="step" id="step3">
+          <div class="num">3</div>
+          <div>
+            <div class="title">שלחו צילום מסך 📸</div>
+            <div class="sub">צלמו שעקבתם ושלחו לנו בוואטסאפ — וזהו, אתם בפנים</div>
+          </div>
+          <a class="step-btn" id="btn-screenshot" target="_blank" rel="noopener">שליחה בוואטסאפ</a>
+          <span class="check">✓ סומן כבוצע</span>
+        </div>
+      </div>
+
+      <div class="form-card">
+        <h2>פרטים לכניסה להגרלה</h2>
+        <p class="lead">השאירו פרטים ותיכנסו אוטומטית להגרלה</p>
+        <div class="field">
+          <label for="name">שם מלא</label>
+          <input type="text" id="name" placeholder="ישראל ישראלי" autocomplete="name" />
+        </div>
+        <div class="field">
+          <label for="phone">טלפון נייד</label>
+          <input type="tel" id="phone" placeholder="050-0000000" autocomplete="tel" inputmode="numeric" />
+        </div>
+        <label class="consent">
+          <input type="checkbox" id="consent" />
+          <span>אני מאשר/ת השתתפות בהגרלה וקבלת עדכונים מ<span id="biz2">העסק</span>. ניתן להסיר בכל עת.</span>
+        </label>
+        <button class="submit" id="submit" disabled>שלחו אותי להגרלה 🎁</button>
+        <div class="hint" id="hint">השלימו את 3 השלבים למעלה כדי להשתתף</div>
+      </div>
+    </section>
+
+    <section class="success" id="success">
+      <div class="tick">✓</div>
+      <h2>נכנסתם להגרלה! 🎉</h2>
+      <p>בהצלחה! נעדכן את הזוכים דרך הערוץ. שווה לעקוב 👀</p>
+    </section>
+
+    <footer>מופעל באמצעות מערכת הגרלות עצמאית · ללא חיבור לוואטסאפ</footer>
+  </div>
+
+<script>
+  const state = { 1: false, 2: false, 3: false };
+  let CFG = {};
+
+  function markDone(n) {
+    if (state[n]) return;
+    state[n] = true;
+    document.getElementById("step" + n).classList.add("done");
+    refreshSubmit();
+  }
+  function refreshSubmit() {
+    const all = state[1] && state[2] && state[3];
+    const btn = document.getElementById("submit");
+    btn.disabled = !all;
+    document.getElementById("hint").textContent = all ? "" : "השלימו את 3 השלבים למעלה כדי להשתתף";
+  }
+
+  // טעינת הגדרות
+  fetch("/api/config").then(r => r.json()).then(cfg => {
+    CFG = cfg;
+    document.getElementById("biz").textContent = cfg.businessName;
+    document.getElementById("biz2").textContent = cfg.businessName;
+    document.getElementById("prize").textContent = cfg.prizeText;
+    document.getElementById("btn-channel").href = cfg.channelUrl;
+    const waText = encodeURIComponent("שלום! צירפתי צילום מסך להשתתפות בהגרלה 🎁");
+    document.getElementById("btn-screenshot").href = "https://wa.me/" + cfg.clientPhone + "?text=" + waText;
+  });
+
+  document.getElementById("btn-channel").addEventListener("click", () => markDone(1));
+  document.getElementById("btn-contact").addEventListener("click", () => markDone(2));
+  document.getElementById("btn-screenshot").addEventListener("click", () => markDone(3));
+
+  document.getElementById("submit").addEventListener("click", async () => {
+    const name = document.getElementById("name").value.trim();
+    const phone = document.getElementById("phone").value.trim();
+    const consent = document.getElementById("consent").checked;
+    const hint = document.getElementById("hint");
+
+    if (!name)    { hint.textContent = "נא למלא שם"; return; }
+    if (!phone)   { hint.textContent = "נא למלא טלפון"; return; }
+    if (!consent) { hint.textContent = "יש לאשר את ההשתתפות"; return; }
+
+    const btn = document.getElementById("submit");
+    btn.disabled = true; hint.textContent = "";
+
+    try {
+      const res = await fetch("/api/enter", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, phone, consent }),
+      });
+      const data = await res.json();
+      if (!res.ok) { hint.textContent = data.error || "שגיאה, נסו שוב"; btn.disabled = false; return; }
+      document.getElementById("flow").style.display = "none";
+      document.getElementById("success").classList.add("show");
+      if (data.duplicate) {
+        document.querySelector("#success p").textContent = "כבר נרשמתם — אתם בהגרלה! בהצלחה 👀";
+      }
+      launchConfetti();
+    } catch {
+      hint.textContent = "שגיאת רשת, נסו שוב"; btn.disabled = false;
+    }
+  });
+
+  function launchConfetti() {
+    const colors = ["#d9a441", "#14503a", "#c0492f", "#efe6d0"];
+    for (let i = 0; i < 40; i++) {
+      const c = document.createElement("div");
+      c.className = "confetti";
+      c.style.left = Math.random() * 100 + "vw";
+      c.style.background = colors[i % colors.length];
+      const dur = 1.6 + Math.random() * 1.4;
+      c.style.transition = `transform ${dur}s ease-in, opacity ${dur}s`;
+      document.body.appendChild(c);
+      requestAnimationFrame(() => {
+        c.style.opacity = "1";
+        c.style.transform = `translateY(110vh) rotate(${Math.random() * 720}deg)`;
+      });
+      setTimeout(() => c.remove(), dur * 1000 + 200);
+    }
+  }
+</script>
+</body>
+</html>
