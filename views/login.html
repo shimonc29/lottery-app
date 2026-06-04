@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>כניסה לניהול</title>
+<link href="https://fonts.googleapis.com/css2?family=Suez+One&family=Assistant:wght@400;600;700;800&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --bg: #10231a; --card: #1b3a2b; --line: #2c5240;
+    --cream: #f0ead8; --muted: #93a89a; --gold: #d9a441; --gold-deep: #b9842a; --forest: #2f7a58;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: "Assistant", sans-serif;
+    background: var(--bg);
+    background-image: radial-gradient(circle at 80% 10%, rgba(217,164,65,.10), transparent 50%),
+                      radial-gradient(circle at 10% 90%, rgba(47,122,88,.15), transparent 50%);
+    min-height: 100vh;
+    display: flex; align-items: center; justify-content: center;
+    padding: 20px;
+  }
+  .card {
+    width: 100%; max-width: 380px;
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 24px;
+    padding: 36px 28px 32px;
+    box-shadow: 0 24px 60px -20px rgba(0,0,0,.6);
+  }
+  .logo {
+    width: 60px; height: 60px; border-radius: 18px;
+    background: linear-gradient(135deg, var(--forest), #143123);
+    border: 1px solid var(--line);
+    display: grid; place-items: center;
+    font-size: 28px; margin: 0 auto 20px;
+    box-shadow: 0 8px 20px -8px rgba(0,0,0,.5);
+  }
+  h1 {
+    font-family: "Suez One", serif;
+    font-size: 26px; color: #fff;
+    text-align: center; margin-bottom: 4px;
+  }
+  .sub { text-align: center; color: var(--muted); font-size: 14px; margin-bottom: 28px; }
+
+  .field { margin-bottom: 14px; }
+  .field label { display: block; font-weight: 700; font-size: 13px; color: var(--muted); margin-bottom: 6px; }
+  .field input {
+    width: 100%; padding: 13px 14px;
+    background: #0e1f17; border: 1px solid var(--line);
+    border-radius: 12px; color: var(--cream);
+    font-family: "Assistant"; font-size: 16px;
+    transition: border-color .2s, box-shadow .2s;
+  }
+  .field input:focus {
+    outline: none; border-color: var(--forest);
+    box-shadow: 0 0 0 3px rgba(47,122,88,.2);
+  }
+
+  .btn {
+    width: 100%; padding: 15px; border: none; border-radius: 14px;
+    background: var(--gold); color: #10231a;
+    font-family: "Suez One", serif; font-size: 19px;
+    cursor: pointer; margin-top: 6px;
+    box-shadow: 0 5px 0 var(--gold-deep);
+    transition: transform .12s, box-shadow .12s;
+  }
+  .btn:active { transform: translateY(4px); box-shadow: 0 1px 0 var(--gold-deep); }
+
+  .error {
+    background: rgba(192,73,47,.15); border: 1px solid rgba(192,73,47,.4);
+    border-radius: 10px; padding: 11px 14px;
+    color: #f08070; font-size: 14px; font-weight: 700;
+    text-align: center; margin-bottom: 16px;
+    display: none;
+  }
+  .error.show { display: block; }
+</style>
+</head>
+<body>
+  <div class="card">
+    <div class="logo">🎲</div>
+    <h1>ניהול הגרלה</h1>
+    <p class="sub">כניסה לאזור המנהלים</p>
+
+    <div class="error" id="err">שם משתמש או סיסמה שגויים</div>
+
+    <form id="form">
+      <div class="field">
+        <label>שם משתמש</label>
+        <input type="text" id="user" placeholder="admin" autocomplete="username" />
+      </div>
+      <div class="field">
+        <label>סיסמה</label>
+        <input type="password" id="pass" placeholder="••••••••" autocomplete="current-password" />
+      </div>
+      <button class="btn" type="submit">כניסה</button>
+    </form>
+  </div>
+
+<script>
+  // הצג שגיאה אם חזרנו עם ?error
+  if (location.search.includes('error')) {
+    document.getElementById('err').classList.add('show');
+  }
+
+  document.getElementById('form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const user = document.getElementById('user').value;
+    const pass = document.getElementById('pass').value;
+    const res = await fetch('/admin/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ user, pass }),
+    });
+    if (res.ok) {
+      location.href = '/admin';
+    } else {
+      document.getElementById('err').classList.add('show');
+    }
+  });
+</script>
+</body>
+</html>

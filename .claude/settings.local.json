@@ -3,7 +3,13 @@
     "allow": [
       "PowerShell(Set-Location \"C:\\\\Users\\\\Me\\\\קלוד\\\\Lottery software\"; $env:PORT = \"3000\"; Start-Process -NoNewWindow -FilePath \"node\" -ArgumentList \"server.js\" -PassThru | Select-Object Id; Start-Sleep 2; Invoke-WebRequest http://localhost:3000 -UseBasicParsing | Select-Object StatusCode)",
       "PowerShell(Invoke-WebRequest http://localhost:3000 -UseBasicParsing)",
-      "PowerShell(Invoke-WebRequest http://localhost:3000/api/config -UseBasicParsing)"
+      "PowerShell(Invoke-WebRequest http://localhost:3000/api/config -UseBasicParsing)",
+      "PowerShell(Stop-Process -Name node -Force 2>$null; Start-Sleep 1; Set-Location \"C:\\\\Users\\\\Me\\\\קלוד\\\\Lottery software\"; $p = Start-Process -NoNewWindow -FilePath \"node\" -ArgumentList \"server.js\" -PassThru; Start-Sleep 2; Write-Output \"PID: $\\($p.Id\\)\"; Invoke-WebRequest http://localhost:3000/admin/api/settings -Headers @{Authorization=\"Basic YWRtaW46Y2hhbmdlbWUxMjM=\"} -UseBasicParsing | Select-Object StatusCode, Content)",
+      "mcp__Claude_Preview__preview_start",
+      "mcp__Claude_in_Chrome__tabs_context_mcp",
+      "mcp__Claude_in_Chrome__navigate",
+      "mcp__Claude_in_Chrome__read_page",
+      "mcp__Claude_in_Chrome__browser_batch"
     ]
   }
 }

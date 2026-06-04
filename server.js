@@ -1,4 +1,5 @@
 const express = require("express");
+const session = require("express-session");
 const fs = require("fs");
 const path = require("path");
 
@@ -8,7 +9,7 @@ const PORT = process.env.PORT || 3000;
 const DATA_FILE     = path.join(__dirname, "data.json");
 const SETTINGS_FILE = path.join(__dirname, "settings.json");
 
-/* ---------- הגדרות: env → settings.json → ברירת מחדל ---------- */
+/* ---------- הגדרות ---------- */
 const CONFIG = {
   businessName:  process.env.BUSINESS_NAME  || "העסק שלי",
   prizeText:     process.env.PRIZE_TEXT     || "פרס שווה במיוחד 🎁",
@@ -17,16 +18,15 @@ const CONFIG = {
   clientPhone:   process.env.CLIENT_PHONE   || "972586904058",
   contactPrefix: process.env.CONTACT_PREFIX || "הגרלה",
   adminUser:     process.env.ADMIN_USER     || "admin",
-  adminPassword: process.env.ADMIN_PASSWORD || "changeme123",
+  adminPassword: process.env.ADMIN_PASSWORD || "Raffle2024!",
 };
 
-// טוען הגדרות ששמורות בקובץ (מנצחות על env vars)
 try {
   const saved = JSON.parse(fs.readFileSync(SETTINGS_FILE, "utf8"));
   Object.assign(CONFIG, saved);
 } catch {}
 
-/* ---------- אחסון JSON ---------- */
+/* ---------- אחסון ---------- */
 function readEntries() {
   try { return JSON.parse(fs.readFileSync(DATA_FILE, "utf8")); }
   catch { return []; }
@@ -45,6 +45,12 @@ function normalizePhone(raw) {
 
 app.use(express.json());
 app.use(express.static(path.join(__dirname, "public")));
+app.use(session({
+  secret: process.env.SESSION_SECRET || "raffle-secret-key-2024",
+  resave: false,
+  saveUninitialized: false,
+  cookie: { maxAge: 8 * 60 * 60 * 1000 }, // 8 שעות
+}));
 
 /* ============================================================
    צד ציבורי
@@ -95,19 +101,36 @@ app.get("/contact.vcf", (req, res) => {
 });
 
 /* ============================================================
-   אזור ניהול
+   התחברות
    ============================================================ */
-function auth(req, res, next) {
-  const h = req.headers.authorization || "";
-  const [type, b64] = h.split(" ");
-  if (type === "Basic" && b64) {
-    const [u, p] = Buffer.from(b64, "base64").toString().split(":");
-    if (u === CONFIG.adminUser && p === CONFIG.adminPassword) return next();
+app.get("/admin/login", (req, res) => {
+  if (req.session.admin) return res.redirect("/admin");
+  res.sendFile(path.join(__dirname, "views", "login.html"));
+});
+
+app.post("/admin/login", (req, res) => {
+  const { user, pass } = req.body || {};
+  if (user === CONFIG.adminUser && pass === CONFIG.adminPassword) {
+    req.session.admin = true;
+    return res.json({ ok: true });
   }
-  res.setHeader("WWW-Authenticate", 'Basic realm="Admin"');
-  res.status(401).send("דרושה הזדהות");
+  res.status(401).json({ error: "שגיאה" });
+});
+
+app.post("/admin/logout", (req, res) => {
+  req.session.destroy();
+  res.redirect("/admin/login");
+});
+
+/* ---------- middleware הגנה ---------- */
+function auth(req, res, next) {
+  if (req.session.admin) return next();
+  res.redirect("/admin/login");
 }
 
+/* ============================================================
+   אזור ניהול
+   ============================================================ */
 app.get("/admin", auth, (req, res) => {
   res.sendFile(path.join(__dirname, "views", "admin.html"));
 });
@@ -127,7 +150,6 @@ app.get("/admin/api/draw", auth, (req, res) => {
   res.json({ winner: entries[Math.floor(Math.random() * entries.length)] });
 });
 
-/* --- הגדרות --- */
 app.get("/admin/api/settings", auth, (req, res) => {
   res.json({
     businessName:  CONFIG.businessName,
@@ -147,7 +169,6 @@ app.post("/admin/api/settings", auth, (req, res) => {
       CONFIG[key] = String(req.body[key]).trim();
     }
   }
-  // נירמול טלפון אם שונה
   if (req.body.clientPhone) CONFIG.clientPhone = normalizePhone(CONFIG.clientPhone);
 
   fs.writeFileSync(SETTINGS_FILE, JSON.stringify(
@@ -156,7 +177,6 @@ app.post("/admin/api/settings", auth, (req, res) => {
   res.json({ ok: true });
 });
 
-/* --- ייצוא --- */
 app.get("/admin/export.vcf", auth, (req, res) => {
   const entries = readEntries();
   const vcf = entries.map((e) => [
