@@ -1,9 +1,3 @@
-/**
- * דף הגרלה + דאשבורד ניהול
- * אין כאן שום חיבור לוואטסאפ - הכל מבוסס לינקים וטופס.
- * אחסון: קובץ data.json מקומי (קל מאוד להחליף ל-Postgres בהמשך).
- */
-
 const express = require("express");
 const fs = require("fs");
 const path = require("path");
@@ -11,24 +5,28 @@ const path = require("path");
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-/* ============================================================
-   הגדרות - מומלץ להזין ב-Replit תחת "Secrets" (Environment variables).
-   מה שלא מוגדר שם, ייקח את ברירת המחדל שכאן.
-   ============================================================ */
+const DATA_FILE     = path.join(__dirname, "data.json");
+const SETTINGS_FILE = path.join(__dirname, "settings.json");
+
+/* ---------- הגדרות: env → settings.json → ברירת מחדל ---------- */
 const CONFIG = {
   businessName:  process.env.BUSINESS_NAME  || "העסק שלי",
   prizeText:     process.env.PRIZE_TEXT     || "פרס שווה במיוחד 🎁",
   channelUrl:    process.env.CHANNEL_URL    || "https://whatsapp.com/channel/test",
   clientName:    process.env.CLIENT_NAME    || "שם הלקוח",
   clientPhone:   process.env.CLIENT_PHONE   || "972586904058",
-  contactPrefix: process.env.CONTACT_PREFIX || "הגרלה",        // קידומת לשם איש הקשר בייצוא (לניקוי קל בהמשך)
+  contactPrefix: process.env.CONTACT_PREFIX || "הגרלה",
   adminUser:     process.env.ADMIN_USER     || "admin",
-  adminPassword: process.env.ADMIN_PASSWORD || "changeme123",  // !!! חובה לשנות !!!
+  adminPassword: process.env.ADMIN_PASSWORD || "changeme123",
 };
 
-const DATA_FILE = path.join(__dirname, "data.json");
+// טוען הגדרות ששמורות בקובץ (מנצחות על env vars)
+try {
+  const saved = JSON.parse(fs.readFileSync(SETTINGS_FILE, "utf8"));
+  Object.assign(CONFIG, saved);
+} catch {}
 
-/* ---------- אחסון JSON פשוט ---------- */
+/* ---------- אחסון JSON ---------- */
 function readEntries() {
   try { return JSON.parse(fs.readFileSync(DATA_FILE, "utf8")); }
   catch { return []; }
@@ -37,11 +35,11 @@ function writeEntries(list) {
   fs.writeFileSync(DATA_FILE, JSON.stringify(list, null, 2));
 }
 
-/* ---------- נירמול מספר טלפון ישראלי לפורמט בינלאומי ---------- */
+/* ---------- נירמול טלפון ---------- */
 function normalizePhone(raw) {
   let p = String(raw).replace(/\D/g, "");
   if (p.startsWith("00")) p = p.slice(2);
-  if (p.startsWith("0")) p = "972" + p.slice(1); // 05X... -> 9725X...
+  if (p.startsWith("0")) p = "972" + p.slice(1);
   return p;
 }
 
@@ -51,8 +49,6 @@ app.use(express.static(path.join(__dirname, "public")));
 /* ============================================================
    צד ציבורי
    ============================================================ */
-
-// הגדרות ציבוריות לדף הנחיתה
 app.get("/api/config", (req, res) => {
   res.json({
     businessName: CONFIG.businessName,
@@ -63,7 +59,6 @@ app.get("/api/config", (req, res) => {
   });
 });
 
-// כניסה להגרלה
 app.post("/api/enter", (req, res) => {
   const { name, phone, consent } = req.body || {};
   if (!name || !phone) return res.status(400).json({ error: "יש למלא שם וטלפון" });
@@ -86,7 +81,6 @@ app.post("/api/enter", (req, res) => {
   res.json({ ok: true });
 });
 
-// vCard של הלקוח - שלב "שמירת המספר" בלחיצה אחת
 app.get("/contact.vcf", (req, res) => {
   const vcf = [
     "BEGIN:VCARD", "VERSION:3.0",
@@ -101,7 +95,7 @@ app.get("/contact.vcf", (req, res) => {
 });
 
 /* ============================================================
-   אזור ניהול (מוגן בסיסמה)
+   אזור ניהול
    ============================================================ */
 function auth(req, res, next) {
   const h = req.headers.authorization || "";
@@ -127,14 +121,42 @@ app.delete("/admin/api/entries/:id", auth, (req, res) => {
   res.json({ ok: true });
 });
 
-// הגרלת זוכה אקראי
 app.get("/admin/api/draw", auth, (req, res) => {
   const entries = readEntries();
   if (!entries.length) return res.json({ winner: null });
   res.json({ winner: entries[Math.floor(Math.random() * entries.length)] });
 });
 
-// ייצוא כל המשתתפים כ-vCard אחד - לייבוא מרוכז לטלפון של הלקוח
+/* --- הגדרות --- */
+app.get("/admin/api/settings", auth, (req, res) => {
+  res.json({
+    businessName:  CONFIG.businessName,
+    prizeText:     CONFIG.prizeText,
+    channelUrl:    CONFIG.channelUrl,
+    clientName:    CONFIG.clientName,
+    clientPhone:   CONFIG.clientPhone,
+    contactPrefix: CONFIG.contactPrefix,
+    adminPassword: CONFIG.adminPassword,
+  });
+});
+
+app.post("/admin/api/settings", auth, (req, res) => {
+  const allowed = ["businessName","prizeText","channelUrl","clientName","clientPhone","contactPrefix","adminPassword"];
+  for (const key of allowed) {
+    if (req.body[key] !== undefined && String(req.body[key]).trim() !== "") {
+      CONFIG[key] = String(req.body[key]).trim();
+    }
+  }
+  // נירמול טלפון אם שונה
+  if (req.body.clientPhone) CONFIG.clientPhone = normalizePhone(CONFIG.clientPhone);
+
+  fs.writeFileSync(SETTINGS_FILE, JSON.stringify(
+    Object.fromEntries(allowed.map(k => [k, CONFIG[k]])), null, 2
+  ));
+  res.json({ ok: true });
+});
+
+/* --- ייצוא --- */
 app.get("/admin/export.vcf", auth, (req, res) => {
   const entries = readEntries();
   const vcf = entries.map((e) => [
@@ -149,13 +171,12 @@ app.get("/admin/export.vcf", auth, (req, res) => {
   res.send(vcf + "\r\n");
 });
 
-// ייצוא CSV (לאקסל)
 app.get("/admin/export.csv", auth, (req, res) => {
   const entries = readEntries();
   const rows = [["שם", "טלפון", "תאריך"]].concat(
     entries.map((e) => [e.name, e.phone, new Date(e.createdAt).toLocaleString("he-IL")])
   );
-  const csv = "\uFEFF" + rows
+  const csv = "﻿" + rows
     .map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(","))
     .join("\n");
   res.setHeader("Content-Type", "text/csv; charset=utf-8");

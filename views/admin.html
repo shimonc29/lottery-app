@@ -8,7 +8,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Suez+One&family=Assistant:wght@400;600;700;800&display=swap" rel="stylesheet" />
 <style>
   :root {
-    --bg: #10231a; --panel: #16312443; --card: #1b3a2b; --line: #2c5240;
+    --bg: #10231a; --card: #1b3a2b; --line: #2c5240;
     --cream: #f0ead8; --muted: #93a89a; --gold: #d9a441; --forest: #2f7a58; --red: #c0492f;
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -22,6 +22,16 @@
   h1 { font-family: "Suez One", serif; font-size: 28px; color: #fff; }
   .pill { background: var(--gold); color: #10231a; font-weight: 800; padding: 4px 12px; border-radius: 999px; font-size: 13px; }
 
+  .tabs { display: flex; gap: 8px; margin-bottom: 20px; border-bottom: 1px solid var(--line); }
+  .tab {
+    padding: 10px 18px; border-radius: 10px 10px 0 0; cursor: pointer;
+    font-weight: 700; font-size: 15px; color: var(--muted); background: none; border: none;
+    border-bottom: 3px solid transparent; transition: color .2s, border-color .2s;
+  }
+  .tab.active { color: var(--gold); border-bottom-color: var(--gold); }
+  .pane { display: none; }
+  .pane.active { display: block; }
+
   .stats { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-bottom: 18px; }
   .stat { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 16px 18px; }
   .stat .n { font-family: "Suez One", serif; font-size: 34px; color: var(--gold); line-height: 1; }
@@ -32,7 +42,7 @@
     border: 1px solid var(--line); background: var(--card); color: var(--cream);
     border-radius: 12px; padding: 11px 16px; font-family: "Assistant"; font-weight: 700; font-size: 14px;
     cursor: pointer; text-decoration: none; display: inline-flex; align-items: center; gap: 7px;
-    transition: transform .1s, border-color .2s, background .2s;
+    transition: transform .1s, border-color .2s;
   }
   .btn:hover { border-color: var(--forest); }
   .btn:active { transform: translateY(2px); }
@@ -45,7 +55,7 @@
     text-align: center;
   }
   .draw-result.show { display: block; animation: pop .4s ease; }
-  .draw-result .lbl { font-size: 13px; color: var(--gold); font-weight: 800; letter-spacing: .5px; }
+  .draw-result .lbl { font-size: 13px; color: var(--gold); font-weight: 800; }
   .draw-result .w-name { font-family: "Suez One", serif; font-size: 30px; color: #fff; margin: 4px 0; }
   .draw-result .w-phone { font-size: 16px; color: var(--cream); direction: ltr; }
   @keyframes pop { from { transform: scale(.95); opacity: 0; } to { transform: scale(1); opacity: 1; } }
@@ -58,6 +68,28 @@
   .del { background: none; border: none; color: var(--red); cursor: pointer; font-size: 18px; opacity: .7; }
   .del:hover { opacity: 1; }
   .empty { text-align: center; color: var(--muted); padding: 40px; }
+
+  .settings-card {
+    background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 24px;
+  }
+  .settings-card h2 { font-family: "Suez One", serif; font-size: 22px; color: var(--gold); margin-bottom: 20px; }
+  .sfield { margin-bottom: 16px; }
+  .sfield label { display: block; font-weight: 700; font-size: 13px; color: var(--muted); margin-bottom: 6px; }
+  .sfield input {
+    width: 100%; padding: 12px 14px; background: #0e1f17; border: 1px solid var(--line);
+    border-radius: 10px; color: var(--cream); font-family: "Assistant"; font-size: 15px;
+  }
+  .sfield input:focus { outline: none; border-color: var(--forest); box-shadow: 0 0 0 3px rgba(47,122,88,.2); }
+  .save-btn {
+    width: 100%; padding: 14px; border: none; border-radius: 12px;
+    background: var(--gold); color: #10231a; font-family: "Suez One", serif; font-size: 18px;
+    cursor: pointer; margin-top: 8px; transition: opacity .2s;
+  }
+  .save-btn:active { opacity: .8; }
+  .save-msg { text-align: center; margin-top: 10px; font-size: 14px; font-weight: 700; min-height: 18px; }
+  .save-msg.ok { color: #5de0a0; }
+  .save-msg.err { color: var(--red); }
+  .divider { border: none; border-top: 1px solid var(--line); margin: 22px 0; }
 </style>
 </head>
 <body>
@@ -67,32 +99,93 @@
       <span class="pill">אזור מנהל</span>
     </header>
 
-    <div class="stats">
-      <div class="stat"><div class="n" id="count">0</div><div class="l">משתתפים בהגרלה</div></div>
-      <div class="stat"><div class="n" id="today">0</div><div class="l">נרשמו היום</div></div>
+    <div class="tabs">
+      <button class="tab active" data-tab="participants">משתתפים</button>
+      <button class="tab" data-tab="settings">⚙️ הגדרות</button>
     </div>
 
-    <div class="actions">
-      <button class="btn draw" id="draw">🎲 הגרלת זוכה</button>
-      <a class="btn primary" href="/admin/export.vcf">📇 ייצוא אנשי קשר (vCard)</a>
-      <a class="btn" href="/admin/export.csv">📊 ייצוא לאקסל (CSV)</a>
-      <button class="btn" id="refresh">↻ רענון</button>
+    <!-- משתתפים -->
+    <div class="pane active" id="tab-participants">
+      <div class="stats">
+        <div class="stat"><div class="n" id="count">0</div><div class="l">משתתפים בהגרלה</div></div>
+        <div class="stat"><div class="n" id="today">0</div><div class="l">נרשמו היום</div></div>
+      </div>
+
+      <div class="actions">
+        <button class="btn draw" id="draw">🎲 הגרלת זוכה</button>
+        <a class="btn primary" href="/admin/export.vcf">📇 ייצוא אנשי קשר (vCard)</a>
+        <a class="btn" href="/admin/export.csv">📊 ייצוא לאקסל (CSV)</a>
+        <button class="btn" id="refresh">↻ רענון</button>
+      </div>
+
+      <div class="draw-result" id="drawResult">
+        <div class="lbl">🏆 הזוכה בהגרלה</div>
+        <div class="w-name" id="wName"></div>
+        <div class="w-phone" id="wPhone"></div>
+      </div>
+
+      <table>
+        <thead><tr><th>שם</th><th>טלפון</th><th>תאריך הרשמה</th><th></th></tr></thead>
+        <tbody id="rows"></tbody>
+      </table>
+      <div class="empty" id="empty" style="display:none">עדיין אין משתתפים</div>
     </div>
 
-    <div class="draw-result" id="drawResult">
-      <div class="lbl">🏆 הזוכה בהגרלה</div>
-      <div class="w-name" id="wName"></div>
-      <div class="w-phone" id="wPhone"></div>
-    </div>
+    <!-- הגדרות -->
+    <div class="pane" id="tab-settings">
+      <div class="settings-card">
+        <h2>הגדרות המערכת</h2>
 
-    <table>
-      <thead><tr><th>שם</th><th>טלפון</th><th>תאריך הרשמה</th><th></th></tr></thead>
-      <tbody id="rows"></tbody>
-    </table>
-    <div class="empty" id="empty" style="display:none">עדיין אין משתתפים</div>
+        <div class="sfield">
+          <label>שם העסק</label>
+          <input id="s-businessName" type="text" placeholder="צמרת" />
+        </div>
+        <div class="sfield">
+          <label>תיאור הפרס</label>
+          <input id="s-prizeText" type="text" placeholder="שובר על 1,000 ₪" />
+        </div>
+        <div class="sfield">
+          <label>קישור לערוץ וואטסאפ</label>
+          <input id="s-channelUrl" type="url" placeholder="https://whatsapp.com/channel/..." dir="ltr" />
+        </div>
+
+        <hr class="divider" />
+
+        <div class="sfield">
+          <label>שם הלקוח (יישמר באנשי הקשר של המשתתפים)</label>
+          <input id="s-clientName" type="text" placeholder="דני - צמרת" />
+        </div>
+        <div class="sfield">
+          <label>מספר טלפון הלקוח</label>
+          <input id="s-clientPhone" type="tel" placeholder="0586904058" dir="ltr" />
+        </div>
+        <div class="sfield">
+          <label>קידומת לשמות בייצוא vCard</label>
+          <input id="s-contactPrefix" type="text" placeholder="הגרלה" />
+        </div>
+
+        <hr class="divider" />
+
+        <div class="sfield">
+          <label>סיסמת כניסה לניהול (השאר ריק אם לא רוצה לשנות)</label>
+          <input id="s-adminPassword" type="password" placeholder="סיסמה חדשה..." autocomplete="new-password" />
+        </div>
+
+        <button class="save-btn" id="saveSettings">שמור הגדרות</button>
+        <div class="save-msg" id="saveMsg"></div>
+      </div>
+    </div>
   </div>
 
 <script>
+  document.querySelectorAll(".tab").forEach(tab => {
+    tab.addEventListener("click", () => {
+      document.querySelectorAll(".tab, .pane").forEach(el => el.classList.remove("active"));
+      tab.classList.add("active");
+      document.getElementById("tab-" + tab.dataset.tab).classList.add("active");
+    });
+  });
+
   async function load() {
     const res = await fetch("/admin/api/entries");
     const list = await res.json();
@@ -109,7 +202,7 @@
       const tr = document.createElement("tr");
       const d = new Date(e.createdAt).toLocaleString("he-IL", { dateStyle: "short", timeStyle: "short" });
       tr.innerHTML = `
-        <td>${escapeHtml(e.name)}</td>
+        <td>${esc(e.name)}</td>
         <td class="phone">+${e.phone}</td>
         <td>${d}</td>
         <td><button class="del" title="מחיקה" data-id="${e.id}">🗑</button></td>`;
@@ -125,8 +218,7 @@
   }
 
   document.getElementById("draw").addEventListener("click", async () => {
-    const res = await fetch("/admin/api/draw");
-    const { winner } = await res.json();
+    const { winner } = await (await fetch("/admin/api/draw")).json();
     const box = document.getElementById("drawResult");
     if (!winner) { box.classList.remove("show"); alert("אין משתתפים בהגרלה"); return; }
     document.getElementById("wName").textContent = winner.name;
@@ -136,8 +228,53 @@
   });
 
   document.getElementById("refresh").addEventListener("click", load);
-  function escapeHtml(s){ return String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
+
+  async function loadSettings() {
+    const cfg = await (await fetch("/admin/api/settings")).json();
+    document.getElementById("s-businessName").value  = cfg.businessName  || "";
+    document.getElementById("s-prizeText").value     = cfg.prizeText     || "";
+    document.getElementById("s-channelUrl").value    = cfg.channelUrl    || "";
+    document.getElementById("s-clientName").value    = cfg.clientName    || "";
+    document.getElementById("s-clientPhone").value   = cfg.clientPhone   || "";
+    document.getElementById("s-contactPrefix").value = cfg.contactPrefix || "";
+  }
+
+  document.getElementById("saveSettings").addEventListener("click", async () => {
+    const body = {
+      businessName:  document.getElementById("s-businessName").value,
+      prizeText:     document.getElementById("s-prizeText").value,
+      channelUrl:    document.getElementById("s-channelUrl").value,
+      clientName:    document.getElementById("s-clientName").value,
+      clientPhone:   document.getElementById("s-clientPhone").value,
+      contactPrefix: document.getElementById("s-contactPrefix").value,
+    };
+    const pw = document.getElementById("s-adminPassword").value;
+    if (pw) body.adminPassword = pw;
+
+    const res = await fetch("/admin/api/settings", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const msg = document.getElementById("saveMsg");
+    if (res.ok) {
+      msg.textContent = "✓ ההגדרות נשמרו בהצלחה";
+      msg.className = "save-msg ok";
+      document.getElementById("s-adminPassword").value = "";
+      if (pw) setTimeout(() => location.reload(), 800);
+    } else {
+      msg.textContent = "שגיאה בשמירה, נסה שוב";
+      msg.className = "save-msg err";
+    }
+    setTimeout(() => msg.textContent = "", 3000);
+  });
+
+  function esc(s) {
+    return String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+  }
+
   load();
+  loadSettings();
 </script>
 </body>
 </html>
