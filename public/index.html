@@ -166,6 +166,45 @@
   .success p { color: #5d6b62; margin-top: 6px; font-size: 15px; }
   @keyframes pop { from { transform: scale(.9); opacity: 0; } to { transform: scale(1); opacity: 1; } }
 
+  /* ---- Referral box ---- */
+  .ref-box {
+    margin-top: 22px;
+    background: linear-gradient(160deg, var(--forest), var(--forest-2));
+    border-radius: var(--radius);
+    padding: 20px 18px;
+    color: var(--cream);
+    text-align: right;
+  }
+  .ref-box h3 { font-family: "Suez One", serif; font-size: 20px; color: #fff; margin-bottom: 6px; }
+  .ref-box .ref-desc { font-size: 13.5px; opacity: .88; margin-bottom: 14px; line-height: 1.5; }
+  .ref-box .tickets {
+    display: inline-flex; align-items: center; gap: 8px;
+    background: rgba(217,164,65,.18); border: 1px solid rgba(217,164,65,.4);
+    border-radius: 10px; padding: 8px 14px; margin-bottom: 14px;
+    font-weight: 800; font-size: 15px; color: var(--gold);
+  }
+  .ref-link-wrap { display: flex; gap: 8px; }
+  .ref-link-input {
+    flex: 1; padding: 11px 12px; border-radius: 10px;
+    border: 1px solid rgba(255,255,255,.2); background: rgba(0,0,0,.25);
+    color: #fff; font-size: 13px; direction: ltr;
+  }
+  .copy-btn {
+    padding: 11px 16px; border: none; border-radius: 10px;
+    background: var(--gold); color: var(--forest-2);
+    font-family: "Assistant"; font-weight: 800; font-size: 14px;
+    cursor: pointer; white-space: nowrap;
+    transition: opacity .15s;
+  }
+  .copy-btn:active { opacity: .75; }
+  .share-btn {
+    width: 100%; margin-top: 10px; padding: 13px;
+    border: none; border-radius: 12px;
+    background: #25D366; color: #fff;
+    font-family: "Assistant"; font-weight: 800; font-size: 15px;
+    cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px;
+  }
+
   footer { text-align: center; margin-top: 26px; font-size: 12px; color: #9a9482; }
   .confetti { position: fixed; top: -10px; width: 9px; height: 14px; opacity: 0; z-index: 50; border-radius: 2px; }
 </style>
@@ -238,7 +277,18 @@
     <section class="success" id="success">
       <div class="tick">✓</div>
       <h2>נכנסתם להגרלה! 🎉</h2>
-      <p>בהצלחה! נעדכן את הזוכים דרך הערוץ. שווה לעקוב 👀</p>
+      <p id="success-msg">בהצלחה! נעדכן את הזוכים דרך הערוץ. שווה לעקוב 👀</p>
+
+      <div class="ref-box" id="ref-box" style="display:none">
+        <h3>🎟️ רוצים כרטיסים נוספים?</h3>
+        <p class="ref-desc">כל חבר שיצטרף להגרלה דרך הלינק שלכם — מזכה אתכם בכרטיס נוסף!</p>
+        <div class="tickets" id="ref-tickets">🎟️ <span id="ref-count">0</span> כרטיסים עד כה</div>
+        <div class="ref-link-wrap">
+          <input class="ref-link-input" id="ref-link-input" readonly />
+          <button class="copy-btn" id="copy-btn">העתק</button>
+        </div>
+        <button class="share-btn" id="share-btn">📤 שתפו בסטטוס וואטסאפ</button>
+      </div>
     </section>
 
     <footer>מופעל באמצעות מערכת הגרלות עצמאית · ללא חיבור לוואטסאפ</footer>
@@ -247,6 +297,7 @@
 <script>
   const state = { 1: false, 2: false, 3: false };
   let CFG = {};
+  const urlRef = new URLSearchParams(location.search).get("ref") || "";
 
   function markDone(n) {
     if (state[n]) return;
@@ -261,14 +312,13 @@
     document.getElementById("hint").textContent = all ? "" : "השלימו את 3 השלבים למעלה כדי להשתתף";
   }
 
-  // טעינת הגדרות
   fetch("/api/config").then(r => r.json()).then(cfg => {
     CFG = cfg;
     document.getElementById("biz").textContent = cfg.businessName;
     document.getElementById("biz2").textContent = cfg.businessName;
     document.getElementById("prize").textContent = cfg.prizeText;
     document.getElementById("btn-channel").href = cfg.channelUrl;
-    const waText = encodeURIComponent("שלום! צירפתי צילום מסך להשתתפות בהגרלה 🎁");
+    const waText = encodeURIComponent("מצרף להודעה תמונה של השיתוף 📸");
     document.getElementById("btn-screenshot").href = "https://wa.me/" + cfg.clientPhone + "?text=" + waText;
   });
 
@@ -293,20 +343,60 @@
       const res = await fetch("/api/enter", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, phone, consent }),
+        body: JSON.stringify({ name, phone, consent, ref: urlRef }),
       });
       const data = await res.json();
       if (!res.ok) { hint.textContent = data.error || "שגיאה, נסו שוב"; btn.disabled = false; return; }
+
       document.getElementById("flow").style.display = "none";
       document.getElementById("success").classList.add("show");
+
       if (data.duplicate) {
-        document.querySelector("#success p").textContent = "כבר נרשמתם — אתם בהגרלה! בהצלחה 👀";
+        document.getElementById("success-msg").textContent = "כבר נרשמתם — אתם בהגרלה! בהצלחה 👀";
       }
+
+      // הצגת לינק שותפים
+      showReferral(data.phone);
       launchConfetti();
     } catch {
       hint.textContent = "שגיאת רשת, נסו שוב"; btn.disabled = false;
     }
   });
+
+  async function showReferral(phone) {
+    if (!phone) return;
+    const refBox = document.getElementById("ref-box");
+    refBox.style.display = "block";
+
+    const refUrl = location.origin + "/?ref=" + phone;
+    document.getElementById("ref-link-input").value = refUrl;
+
+    // ספירת הפניות
+    try {
+      const r = await fetch("/api/referrals/" + phone);
+      const { count } = await r.json();
+      document.getElementById("ref-count").textContent = count;
+    } catch {}
+
+    // כפתור העתקה
+    document.getElementById("copy-btn").addEventListener("click", () => {
+      navigator.clipboard.writeText(refUrl).then(() => {
+        const btn = document.getElementById("copy-btn");
+        btn.textContent = "✓ הועתק!";
+        setTimeout(() => btn.textContent = "העתק", 2000);
+      });
+    });
+
+    // כפתור שיתוף
+    document.getElementById("share-btn").addEventListener("click", () => {
+      const text = encodeURIComponent(
+        "🎉 הצטרפו להגרלה של " + (CFG.businessName || "העסק שלנו") +
+        " — " + (CFG.prizeText || "פרס מדהים") +
+        "!\nלחצו כאן להצטרפות: " + refUrl
+      );
+      window.open("https://wa.me/?text=" + text, "_blank");
+    });
+  }
 
   function launchConfetti() {
     const colors = ["#d9a441", "#14503a", "#c0492f", "#efe6d0"];

@@ -125,7 +125,7 @@
       </div>
 
       <table>
-        <thead><tr><th>שם</th><th>טלפון</th><th>תאריך הרשמה</th><th></th></tr></thead>
+        <thead><tr><th>שם</th><th>טלפון</th><th>🎟️ כרטיסים</th><th>תאריך הרשמה</th><th></th></tr></thead>
         <tbody id="rows"></tbody>
       </table>
       <div class="empty" id="empty" style="display:none">עדיין אין משתתפים</div>
@@ -202,12 +202,23 @@
     rows.innerHTML = "";
     document.getElementById("empty").style.display = list.length ? "none" : "block";
 
+    // ספירת הפניות לכל משתתף
+    const refMap = {};
+    for (const e of list) {
+      if (e.referredBy) refMap[e.referredBy] = (refMap[e.referredBy] || 0) + 1;
+    }
+
     for (const e of list) {
       const tr = document.createElement("tr");
       const d = new Date(e.createdAt).toLocaleString("he-IL", { dateStyle: "short", timeStyle: "short" });
+      const tickets = 1 + (refMap[e.phone] || 0);
+      const ticketsLabel = tickets > 1
+        ? `<span style="color:var(--gold);font-weight:800">${tickets} 🎟️</span>`
+        : `<span style="color:var(--muted)">1</span>`;
       tr.innerHTML = `
         <td>${esc(e.name)}</td>
         <td class="phone">+${e.phone}</td>
+        <td style="text-align:center">${ticketsLabel}</td>
         <td>${d}</td>
         <td><button class="del" title="מחיקה" data-id="${e.id}">🗑</button></td>`;
       rows.appendChild(tr);

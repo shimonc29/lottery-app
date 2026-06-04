@@ -9,7 +9,8 @@
       "mcp__Claude_in_Chrome__tabs_context_mcp",
       "mcp__Claude_in_Chrome__navigate",
       "mcp__Claude_in_Chrome__read_page",
-      "mcp__Claude_in_Chrome__browser_batch"
+      "mcp__Claude_in_Chrome__browser_batch",
+      "PowerShell(Set-Location \"C:\\\\Users\\\\Me\\\\קלוד\\\\Lottery software\"; git show HEAD:settings.json 2>$null; Write-Output \"exit: $LASTEXITCODE\")"
     ]
   }
 }

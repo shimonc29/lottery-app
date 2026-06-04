@@ -66,7 +66,7 @@ app.get("/api/config", (req, res) => {
 });
 
 app.post("/api/enter", (req, res) => {
-  const { name, phone, consent } = req.body || {};
+  const { name, phone, consent, ref } = req.body || {};
   if (!name || !phone) return res.status(400).json({ error: "יש למלא שם וטלפון" });
   if (!consent)        return res.status(400).json({ error: "יש לאשר את התקנון" });
 
@@ -75,16 +75,27 @@ app.post("/api/enter", (req, res) => {
 
   const entries = readEntries();
   if (entries.some((e) => e.phone === cleanPhone)) {
-    return res.json({ ok: true, duplicate: true });
+    return res.json({ ok: true, duplicate: true, phone: cleanPhone });
   }
+
+  const cleanRef = ref ? normalizePhone(String(ref)) : null;
   entries.push({
     id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
     name: String(name).trim().slice(0, 80),
     phone: cleanPhone,
+    referredBy: (cleanRef && cleanRef !== cleanPhone) ? cleanRef : null,
     createdAt: new Date().toISOString(),
   });
   writeEntries(entries);
-  res.json({ ok: true });
+  res.json({ ok: true, phone: cleanPhone });
+});
+
+// ספירת הפניות של משתתף
+app.get("/api/referrals/:phone", (req, res) => {
+  const phone = normalizePhone(req.params.phone);
+  const entries = readEntries();
+  const count = entries.filter(e => e.referredBy === phone).length;
+  res.json({ count });
 });
 
 app.get("/contact.vcf", (req, res) => {
