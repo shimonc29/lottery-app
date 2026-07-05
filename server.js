@@ -19,6 +19,8 @@ const CONFIG = {
   contactPrefix: process.env.CONTACT_PREFIX || "הגרלה",
   adminUser:     process.env.ADMIN_USER     || "admin",
   adminPassword: process.env.ADMIN_PASSWORD || "admin1234",
+  drawDate:      process.env.DRAW_DATE      || "ההגרלה תתקיים ביום ראשון 19 ליולי בסטטוס של קרן תכירו",
+  heroImage:     process.env.HERO_IMAGE     || "",
 };
 
 try {
@@ -62,6 +64,8 @@ app.get("/api/config", (req, res) => {
     channelUrl:   CONFIG.channelUrl,
     clientName:   CONFIG.clientName,
     clientPhone:  CONFIG.clientPhone,
+    drawDate:     CONFIG.drawDate,
+    heroImage:    CONFIG.heroImage,
   });
 });
 
@@ -193,11 +197,13 @@ app.get("/admin/api/settings", auth, (req, res) => {
     clientPhone:   CONFIG.clientPhone,
     contactPrefix: CONFIG.contactPrefix,
     adminPassword: CONFIG.adminPassword,
+    drawDate:      CONFIG.drawDate,
+    heroImage:     CONFIG.heroImage,
   });
 });
 
 app.post("/admin/api/settings", auth, (req, res) => {
-  const allowed = ["businessName","prizeText","channelUrl","clientName","clientPhone","contactPrefix","adminPassword"];
+  const allowed = ["businessName","prizeText","channelUrl","clientName","clientPhone","contactPrefix","adminPassword","drawDate","heroImage"];
   for (const key of allowed) {
     if (req.body[key] !== undefined && String(req.body[key]).trim() !== "") {
       CONFIG[key] = String(req.body[key]).trim();

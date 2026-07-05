@@ -224,6 +224,12 @@
   .check-result-box .refs { font-size: 13px; color: var(--forest); font-weight: 700; margin-top: 6px; }
   .check-err { color: var(--red); font-size: 14px; font-weight: 700; text-align: center; }
 
+  .draw-date {
+    position: relative;
+    margin-top: 12px;
+    font-size: 13px; font-weight: 600; opacity: .85;
+    color: var(--cream);
+  }
   footer { text-align: center; margin-top: 26px; font-size: 12px; color: #9a9482; }
   .confetti { position: fixed; top: -10px; width: 9px; height: 14px; opacity: 0; z-index: 50; border-radius: 2px; }
 </style>
@@ -235,7 +241,11 @@
       <h1 id="title">הצטרפו להגרלה</h1>
       <div class="biz" id="biz">העסק שלי</div>
       <div class="prize"><span>הפרס הגדול</span><div id="prize">פרס שווה במיוחד 🎁</div></div>
+      <div class="draw-date" id="draw-date" style="display:none"></div>
     </header>
+    <div id="hero-image-wrap" style="display:none;margin-top:14px">
+      <img id="hero-image" src="" alt="" style="width:100%;border-radius:var(--radius);max-height:280px;object-fit:cover;box-shadow:0 8px 24px -10px rgba(0,0,0,.3)" />
+    </div>
 
     <!-- בדיקת כרטיסים — לחברים שכבר נרשמו -->
     <div class="check-card" id="check-card">
@@ -254,10 +264,10 @@
         <div class="step" id="step1">
           <div class="num">1</div>
           <div>
-            <div class="title">עקבו אחרי הערוץ 📢</div>
-            <div class="sub">ככה תהיו מעודכנים בכל ההגרלות והעדכונים</div>
+            <div class="title">העלו את הסרטון לסטטוס 📢</div>
+            <div class="sub">שתפו את הסרטון בסטטוס הוואטסאפ שלכם</div>
           </div>
-          <a class="step-btn" id="btn-channel" target="_blank" rel="noopener">מעבר לערוץ</a>
+          <a class="step-btn" id="btn-channel" target="_blank" rel="noopener">לסרטון</a>
           <span class="check">✓ סומן כבוצע</span>
         </div>
 
@@ -277,7 +287,7 @@
           <div class="num">3</div>
           <div>
             <div class="title">שלחו צילום מסך 📸</div>
-            <div class="sub">צלמו שעקבתם ושלחו לנו בוואטסאפ — וזהו, אתם בפנים</div>
+            <div class="sub">צלמו שהעלתם את הסרטון לסטטוס ושלחו לנו בוואטסאפ</div>
           </div>
           <a class="step-btn" id="btn-screenshot" target="_blank" rel="noopener">שליחה בוואטסאפ</a>
           <span class="check">✓ סומן כבוצע</span>
@@ -350,6 +360,16 @@
     document.getElementById("btn-channel").href = cfg.channelUrl;
     const waText = encodeURIComponent("מצרף להודעה תמונה של השיתוף 📸");
     document.getElementById("btn-screenshot").href = "https://wa.me/" + cfg.clientPhone + "?text=" + waText;
+
+    if (cfg.drawDate) {
+      const el = document.getElementById("draw-date");
+      el.textContent = "📅 " + cfg.drawDate;
+      el.style.display = "block";
+    }
+    if (cfg.heroImage) {
+      document.getElementById("hero-image").src = cfg.heroImage;
+      document.getElementById("hero-image-wrap").style.display = "block";
+    }
   });
 
   document.getElementById("btn-channel").addEventListener("click", () => markDone(1));

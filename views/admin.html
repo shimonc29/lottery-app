@@ -169,6 +169,18 @@
           <input id="s-contactPrefix" type="text" placeholder="הגרלה" />
         </div>
 
+        <div class="sfield">
+          <label>תאריך ההגרלה (יוצג בקטן מתחת לכותרת)</label>
+          <input id="s-drawDate" type="text" placeholder="ההגרלה תתקיים ביום ראשון 19 ליולי בסטטוס של קרן תכירו" />
+        </div>
+        <div class="sfield">
+          <label>תמונה מתחת לכותרת (הדבק קישור URL לתמונה)</label>
+          <input id="s-heroImage" type="url" placeholder="https://..." dir="ltr" />
+          <div id="heroImagePreview" style="margin-top:8px;display:none">
+            <img id="heroImgPreviewEl" src="" style="width:100%;border-radius:10px;max-height:180px;object-fit:cover" />
+          </div>
+        </div>
+
         <hr class="divider" />
 
         <div class="sfield">
@@ -254,6 +266,12 @@
     document.getElementById("s-clientName").value    = cfg.clientName    || "";
     document.getElementById("s-clientPhone").value   = cfg.clientPhone   || "";
     document.getElementById("s-contactPrefix").value = cfg.contactPrefix || "";
+    document.getElementById("s-drawDate").value      = cfg.drawDate      || "";
+    document.getElementById("s-heroImage").value     = cfg.heroImage     || "";
+    if (cfg.heroImage) {
+      document.getElementById("heroImgPreviewEl").src = cfg.heroImage;
+      document.getElementById("heroImagePreview").style.display = "block";
+    }
   }
 
   document.getElementById("saveSettings").addEventListener("click", async () => {
@@ -264,7 +282,15 @@
       clientName:    document.getElementById("s-clientName").value,
       clientPhone:   document.getElementById("s-clientPhone").value,
       contactPrefix: document.getElementById("s-contactPrefix").value,
+      drawDate:      document.getElementById("s-drawDate").value,
+      heroImage:     document.getElementById("s-heroImage").value,
     };
+    // עדכון תצוגה מקדימה של התמונה
+    const imgUrl = body.heroImage;
+    if (imgUrl) {
+      document.getElementById("heroImgPreviewEl").src = imgUrl;
+      document.getElementById("heroImagePreview").style.display = "block";
+    }
     const pw = document.getElementById("s-adminPassword").value;
     if (pw) body.adminPassword = pw;
 
