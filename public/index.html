@@ -464,10 +464,14 @@
       if (!data.found) {
         res.innerHTML = '<div class="check-err">המספר לא נמצא ברשימת הנרשמים</div>';
       } else {
+        const refUrl = location.origin + "/?ref=" + data.phone;
+        const shareText = encodeURIComponent("להשתתפות בהגרלה הגדולה של " + (CFG.businessName || "העסק שלנו") + " לחצו כאן\n" + refUrl);
+        const waHref = "https://wa.me/?text=" + shareText;
         res.innerHTML = `<div class="check-result-box">
           <div class="big">${data.tickets} 🎟️</div>
           <div class="lbl">כרטיסי הגרלה, ${data.name}</div>
           <div class="refs">${data.referrals > 0 ? `הבאתם ${data.referrals} חברים — כל הכבוד! 🙌` : 'שתפו חברים וצברו כרטיסים נוספים'}</div>
+          <a href="${waHref}" target="_blank" rel="noopener" style="display:inline-block;margin-top:12px;padding:10px 20px;background:#25d366;color:#fff;border-radius:12px;font-weight:700;font-size:15px;text-decoration:none;">📤 שתפו את הלינק שלכם</a>
         </div>`;
       }
     } catch {
