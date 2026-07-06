@@ -2,6 +2,19 @@ const express = require("express");
 const session = require("express-session");
 const fs = require("fs");
 const path = require("path");
+const multer = require("multer");
+
+const UPLOADS_DIR = path.join(__dirname, "public", "uploads");
+if (!fs.existsSync(UPLOADS_DIR)) fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+
+const storage = multer.diskStorage({
+  destination: UPLOADS_DIR,
+  filename: (req, file, cb) => {
+    const ext = path.extname(file.originalname);
+    cb(null, req.params.slot + ext);
+  },
+});
+const upload = multer({ storage, limits: { fileSize: 50 * 1024 * 1024 } }); // 50MB
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -21,6 +34,7 @@ const CONFIG = {
   adminPassword: process.env.ADMIN_PASSWORD || "admin1234",
   drawDate:      process.env.DRAW_DATE      || "ההגרלה תתקיים ביום ראשון 19 ליולי בסטטוס של קרן תכירו",
   heroImage:     process.env.HERO_IMAGE     || "",
+  shareMedia:    process.env.SHARE_MEDIA    || "",
 };
 
 try {
@@ -66,6 +80,7 @@ app.get("/api/config", (req, res) => {
     clientPhone:  CONFIG.clientPhone,
     drawDate:     CONFIG.drawDate,
     heroImage:    CONFIG.heroImage,
+    shareMedia:   CONFIG.shareMedia,
   });
 });
 
@@ -199,11 +214,30 @@ app.get("/admin/api/settings", auth, (req, res) => {
     adminPassword: CONFIG.adminPassword,
     drawDate:      CONFIG.drawDate,
     heroImage:     CONFIG.heroImage,
+    shareMedia:    CONFIG.shareMedia,
   });
 });
 
+// העלאת קובץ (תמונה/סרטון)
+app.post("/admin/upload/:slot", auth, upload.single("file"), (req, res) => {
+  if (!req.file) return res.status(400).json({ error: "לא הועלה קובץ" });
+  const url = "/uploads/" + req.file.filename;
+  // שמור ב-CONFIG ובקובץ
+  const slot = req.params.slot; // "heroImage" או "shareMedia"
+  if (!["heroImage","shareMedia"].includes(slot)) return res.status(400).json({ error: "slot לא תקין" });
+  CONFIG[slot] = url;
+  try {
+    const saved = JSON.parse(fs.readFileSync(SETTINGS_FILE, "utf8"));
+    saved[slot] = url;
+    fs.writeFileSync(SETTINGS_FILE, JSON.stringify(saved, null, 2));
+  } catch {
+    fs.writeFileSync(SETTINGS_FILE, JSON.stringify({ [slot]: url }, null, 2));
+  }
+  res.json({ ok: true, url });
+});
+
 app.post("/admin/api/settings", auth, (req, res) => {
-  const allowed = ["businessName","prizeText","channelUrl","clientName","clientPhone","contactPrefix","adminPassword","drawDate","heroImage"];
+  const allowed = ["businessName","prizeText","channelUrl","clientName","clientPhone","contactPrefix","adminPassword","drawDate","heroImage","shareMedia"];
   for (const key of allowed) {
     if (req.body[key] !== undefined && String(req.body[key]).trim() !== "") {
       CONFIG[key] = String(req.body[key]).trim();
