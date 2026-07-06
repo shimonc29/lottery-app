@@ -19,8 +19,8 @@ const upload = multer({ storage, limits: { fileSize: 50 * 1024 * 1024 } }); // 5
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-const DATA_FILE     = path.join(__dirname, "data.json");
-const SETTINGS_FILE = path.join(__dirname, "settings.json");
+const DATA_FILE     = path.join(UPLOADS_DIR, "data.json");
+const SETTINGS_FILE = path.join(UPLOADS_DIR, "settings.json");
 
 /* ---------- הגדרות ---------- */
 const CONFIG = {
