@@ -72,6 +72,21 @@
   .settings-card {
     background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 24px;
   }
+  .upload-area {
+    border: 2px dashed var(--line); border-radius: 12px; padding: 18px;
+    text-align: center; cursor: pointer; transition: border-color .2s;
+    position: relative;
+  }
+  .upload-area:hover { border-color: var(--forest); }
+  .upload-area input[type=file] { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%; }
+  .upload-area .up-icon { font-size: 28px; margin-bottom: 6px; }
+  .upload-area .up-label { font-size: 13px; color: var(--muted); }
+  .upload-area .up-name { font-size: 13px; color: var(--gold); font-weight: 700; margin-top: 4px; }
+  .upload-progress { height: 4px; background: var(--line); border-radius: 2px; margin-top: 8px; overflow: hidden; display: none; }
+  .upload-progress-bar { height: 100%; background: var(--forest); width: 0; transition: width .3s; }
+  .upload-preview { margin-top: 10px; border-radius: 10px; overflow: hidden; display: none; }
+  .upload-preview img, .upload-preview video { width: 100%; max-height: 160px; object-fit: cover; border-radius: 10px; }
+  .upload-ok { color: #5de0a0; font-size: 13px; font-weight: 700; margin-top: 6px; display: none; }
   .settings-card h2 { font-family: "Suez One", serif; font-size: 22px; color: var(--gold); margin-bottom: 20px; }
   .sfield { margin-bottom: 16px; }
   .sfield label { display: block; font-weight: 700; font-size: 13px; color: var(--muted); margin-bottom: 6px; }
@@ -173,12 +188,31 @@
           <label>תאריך ההגרלה (יוצג בקטן מתחת לכותרת)</label>
           <input id="s-drawDate" type="text" placeholder="ההגרלה תתקיים ביום ראשון 19 ליולי בסטטוס של קרן תכירו" />
         </div>
+
         <div class="sfield">
-          <label>תמונה מתחת לכותרת (הדבק קישור URL לתמונה)</label>
-          <input id="s-heroImage" type="url" placeholder="https://..." dir="ltr" />
-          <div id="heroImagePreview" style="margin-top:8px;display:none">
-            <img id="heroImgPreviewEl" src="" style="width:100%;border-radius:10px;max-height:180px;object-fit:cover" />
+          <label>סרטון/תמונה לשיתוף (שלב 1)</label>
+          <div class="upload-area" id="shareMediaArea">
+            <input type="file" id="shareMediaFile" accept="video/*,image/*" />
+            <div class="up-icon">🎬</div>
+            <div class="up-label">לחץ להעלאת סרטון או תמונה</div>
+            <div class="up-name" id="shareMediaName"></div>
           </div>
+          <div class="upload-progress" id="shareMediaProgress"><div class="upload-progress-bar" id="shareMediaBar"></div></div>
+          <div class="upload-preview" id="shareMediaPreview"></div>
+          <div class="upload-ok" id="shareMediaOk">✓ הועלה בהצלחה</div>
+        </div>
+
+        <div class="sfield">
+          <label>תמונה מתחת לכותרת הדף</label>
+          <div class="upload-area" id="heroImageArea">
+            <input type="file" id="heroImageFile" accept="image/*" />
+            <div class="up-icon">🖼️</div>
+            <div class="up-label">לחץ להעלאת תמונה</div>
+            <div class="up-name" id="heroImageName"></div>
+          </div>
+          <div class="upload-progress" id="heroImageProgress"><div class="upload-progress-bar" id="heroImageBar"></div></div>
+          <div class="upload-preview" id="heroImagePreview"></div>
+          <div class="upload-ok" id="heroImageOk">✓ הועלה בהצלחה</div>
         </div>
 
         <hr class="divider" />
@@ -267,12 +301,58 @@
     document.getElementById("s-clientPhone").value   = cfg.clientPhone   || "";
     document.getElementById("s-contactPrefix").value = cfg.contactPrefix || "";
     document.getElementById("s-drawDate").value      = cfg.drawDate      || "";
-    document.getElementById("s-heroImage").value     = cfg.heroImage     || "";
-    if (cfg.heroImage) {
-      document.getElementById("heroImgPreviewEl").src = cfg.heroImage;
-      document.getElementById("heroImagePreview").style.display = "block";
-    }
+    if (cfg.heroImage)  showUploadPreview("heroImage",  cfg.heroImage);
+    if (cfg.shareMedia) showUploadPreview("shareMedia", cfg.shareMedia);
   }
+
+  // --- העלאת קבצים ---
+  function showUploadPreview(slot, url) {
+    const preview = document.getElementById(slot + "Preview");
+    const isVideo = url.match(/\.(mp4|webm|mov|avi)$/i);
+    preview.innerHTML = isVideo
+      ? `<video src="${url}" controls></video>`
+      : `<img src="${url}" alt="preview" />`;
+    preview.style.display = "block";
+    document.getElementById(slot + "Ok").style.display = "block";
+  }
+
+  function setupUpload(slot, inputId) {
+    const input = document.getElementById(inputId);
+    input.addEventListener("change", async () => {
+      const file = input.files[0];
+      if (!file) return;
+      document.getElementById(slot + "Name").textContent = file.name;
+
+      const progress = document.getElementById(slot + "Progress");
+      const bar = document.getElementById(slot + "Bar");
+      const ok  = document.getElementById(slot + "Ok");
+      progress.style.display = "block";
+      bar.style.width = "30%";
+      ok.style.display = "none";
+
+      const fd = new FormData();
+      fd.append("file", file);
+      try {
+        bar.style.width = "60%";
+        const res = await fetch("/admin/upload/" + slot, { method: "POST", body: fd });
+        bar.style.width = "100%";
+        const data = await res.json();
+        if (data.ok) {
+          setTimeout(() => { progress.style.display = "none"; bar.style.width = "0"; }, 400);
+          showUploadPreview(slot, data.url);
+        } else {
+          alert("שגיאה: " + (data.error || "העלאה נכשלה"));
+          progress.style.display = "none";
+        }
+      } catch {
+        alert("שגיאת רשת – נסה שוב");
+        progress.style.display = "none";
+      }
+    });
+  }
+
+  setupUpload("heroImage",  "heroImageFile");
+  setupUpload("shareMedia", "shareMediaFile");
 
   document.getElementById("saveSettings").addEventListener("click", async () => {
     const body = {
@@ -283,14 +363,7 @@
       clientPhone:   document.getElementById("s-clientPhone").value,
       contactPrefix: document.getElementById("s-contactPrefix").value,
       drawDate:      document.getElementById("s-drawDate").value,
-      heroImage:     document.getElementById("s-heroImage").value,
     };
-    // עדכון תצוגה מקדימה של התמונה
-    const imgUrl = body.heroImage;
-    if (imgUrl) {
-      document.getElementById("heroImgPreviewEl").src = imgUrl;
-      document.getElementById("heroImagePreview").style.display = "block";
-    }
     const pw = document.getElementById("s-adminPassword").value;
     if (pw) body.adminPassword = pw;
 
