@@ -357,7 +357,14 @@
     document.getElementById("biz").textContent = cfg.businessName;
     document.getElementById("biz2").textContent = cfg.businessName;
     document.getElementById("prize").textContent = cfg.prizeText;
-    document.getElementById("btn-channel").href = cfg.channelUrl;
+    if (cfg.shareMedia) {
+      const btn = document.getElementById("btn-channel");
+      btn.href = cfg.shareMedia;
+      btn.download = "";
+      btn.textContent = "הורדת הסרטון";
+    } else {
+      document.getElementById("btn-channel").href = cfg.channelUrl;
+    }
     const waText = encodeURIComponent("מצרף להודעה תמונה של השיתוף 📸");
     document.getElementById("btn-screenshot").href = "https://wa.me/" + cfg.clientPhone + "?text=" + waText;
 
