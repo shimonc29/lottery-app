@@ -364,7 +364,15 @@
       btn.style.cursor = "pointer";
       btn.addEventListener("click", async (e) => {
         e.preventDefault();
+        if (btn.dataset.loading) return;
+        btn.dataset.loading = "1";
+        const orig = btn.textContent;
+        btn.textContent = "⏳ טוען סרטון...";
+        btn.style.opacity = "0.7";
+
         const shareText = "הצטרפו להגרלה של " + (CFG.businessName || "העסק שלנו") + "! 🎁";
+        const reset = () => { btn.textContent = orig; btn.style.opacity = ""; delete btn.dataset.loading; };
+
         if (navigator.canShare && navigator.share) {
           try {
             const resp = await fetch(cfg.shareMedia);
@@ -373,16 +381,19 @@
             const mime = blob.type || (ext.match(/mp4|mov|webm/) ? "video/mp4" : "image/jpeg");
             const file = new File([blob], "share." + ext, { type: mime });
             if (navigator.canShare({ files: [file] })) {
+              reset();
               await navigator.share({ files: [file], text: shareText });
               markDone(1);
               return;
             }
           } catch (err) {
+            reset();
             if (err.name !== "AbortError") console.warn("share failed", err);
             else { markDone(1); return; }
           }
         }
         // fallback — download
+        reset();
         const a = document.createElement("a");
         a.href = cfg.shareMedia;
         a.download = "";
