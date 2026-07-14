@@ -72,6 +72,20 @@ function whatsappIntentState(intent) {
   return intent?.state || (intent ? "awaiting_saved" : null);
 }
 
+const CONTACT_RETRY_DELAYS_MS = String(
+  process.env.WPSENDER_CONTACT_RETRY_DELAYS_MS || "15000,60000,300000"
+).split(",").map((value) => Number(value.trim())).filter((value) => Number.isFinite(value) && value >= 0);
+const RECOVERY_SCAN_MS = Math.max(10, Number(process.env.WPSENDER_RECOVERY_SCAN_MS) || 5000);
+
+function raffleDeliveryKey(phone, messageId, step) {
+  return `raffle:${phone}:${messageId || "unknown"}:${step}`;
+}
+
+function retryAtForAttempt(attempt) {
+  const index = Math.min(Math.max(attempt - 1, 0), Math.max(CONTACT_RETRY_DELAYS_MS.length - 1, 0));
+  return new Date(Date.now() + (CONTACT_RETRY_DELAYS_MS[index] || 0)).toISOString();
+}
+
 // Entries created before the WhatsApp approval flow have no status and remain eligible.
 function isApprovedEntry(entry) {
   return !entry.status || entry.status === "approved";
@@ -236,7 +250,7 @@ function getShareInstructions(phone) {
   return `הקובץ מוכן לשיתוף. לחצו "העבר", בחרו "הסטטוס שלי" וודאו שהכיתוב והקישור מצורפים:\n${personalShareLink}\n\nכשתסיימו שלחו כאן את המילה שיתפתי.`;
 }
 
-async function sendRaffleContact(phone) {
+async function sendRaffleContact(phone, idempotencyKey) {
   const vcf = [
     "BEGIN:VCARD", "VERSION:3.0",
     `N:;${CONFIG.clientName};;;`,
@@ -250,8 +264,114 @@ async function sendRaffleContact(phone) {
     buffer: Buffer.from(vcf, "utf8").toString("base64"),
     mimetype: "text/vcard",
     fileName: "contact.vcf",
+    idempotencyKey,
   });
 }
+
+function contactInstructionMessage() {
+  return "\u05d0\u05d9\u05e9 \u05d4\u05e7\u05e9\u05e8 \u05e0\u05e9\u05dc\u05d7. \u05e9\u05de\u05e8\u05d5 \u05d0\u05d5\u05ea\u05d5 \u05d1\u05d8\u05dc\u05e4\u05d5\u05df, \u05d5\u05db\u05e9\u05e1\u05d9\u05d9\u05de\u05ea\u05dd \u05e9\u05dc\u05d7\u05d5 \u05db\u05d0\u05df \u05d0\u05ea \u05d4\u05de\u05d9\u05dc\u05d4 \u05e9\u05de\u05e8\u05ea\u05d9.";
+}
+
+function contactFallbackMessage() {
+  return `\u05dc\u05d0 \u05d4\u05e6\u05dc\u05d7\u05e0\u05d5 \u05dc\u05e6\u05e8\u05e3 \u05d0\u05ea \u05db\u05e8\u05d8\u05d9\u05e1 \u05d0\u05d9\u05e9 \u05d4\u05e7\u05e9\u05e8. \u05e9\u05de\u05e8\u05d5 \u05d0\u05ea \u05d4\u05de\u05e1\u05e4\u05e8 +${normalizePhone(CONFIG.clientPhone)} \u05d1\u05d0\u05e0\u05e9\u05d9 \u05d4\u05e7\u05e9\u05e8, \u05d5\u05d0\u05d7\u05e8\u05d9 \u05d4\u05e9\u05de\u05d9\u05e8\u05d4 \u05e9\u05dc\u05d7\u05d5 \u05db\u05d0\u05df \u05d0\u05ea \u05d4\u05de\u05d9\u05dc\u05d4 \u05e9\u05de\u05e8\u05ea\u05d9.`;
+}
+
+async function completeContactStart(phone, expectedMessageId) {
+  let intent = readWhatsappIntents().find((item) => item.phone === phone);
+  if (!intent || intent.messageId !== expectedMessageId) return { superseded: true };
+
+  if (intent.state !== "contact_sent") {
+    try {
+      await sendRaffleContact(phone, raffleDeliveryKey(phone, expectedMessageId, "contact"));
+      intent = updateWhatsappIntent(phone, {
+        state: "contact_sent",
+        contactAttempts: Number(intent.contactAttempts || 0) + 1,
+        nextRetryAt: null,
+        lastDeliveryError: null,
+      });
+    } catch (error) {
+      const attempts = Number(intent.contactAttempts || 0) + 1;
+      if (attempts > CONTACT_RETRY_DELAYS_MS.length) {
+        try {
+          await sendViaWpsender({
+            to: phone,
+            type: "text",
+            message: contactFallbackMessage(),
+            idempotencyKey: raffleDeliveryKey(phone, expectedMessageId, "contact-fallback"),
+          });
+          updateWhatsappIntent(phone, {
+            state: "awaiting_saved",
+            contactAttempts: attempts,
+            contactFallbackUsed: true,
+            nextRetryAt: null,
+            lastDeliveryError: null,
+          });
+          return { delivered: true, fallback: true };
+        } catch (fallbackError) {
+          updateWhatsappIntent(phone, {
+            state: "contact_retry_pending",
+            contactAttempts: attempts,
+            nextRetryAt: retryAtForAttempt(attempts),
+            lastDeliveryError: String(fallbackError.message || fallbackError).slice(0, 200),
+          });
+          return { retryScheduled: true };
+        }
+      }
+      updateWhatsappIntent(phone, {
+        state: "contact_retry_pending",
+        contactAttempts: attempts,
+        nextRetryAt: retryAtForAttempt(attempts),
+        lastDeliveryError: String(error.message || error).slice(0, 200),
+      });
+      return { retryScheduled: true };
+    }
+  }
+
+  try {
+    await sendViaWpsender({
+      to: phone,
+      type: "text",
+      message: contactInstructionMessage(),
+      idempotencyKey: raffleDeliveryKey(phone, expectedMessageId, "contact-instruction"),
+    });
+    updateWhatsappIntent(phone, {
+      state: "awaiting_saved",
+      nextRetryAt: null,
+      lastDeliveryError: null,
+    });
+    return { delivered: true };
+  } catch (error) {
+    updateWhatsappIntent(phone, {
+      state: "contact_sent",
+      nextRetryAt: retryAtForAttempt(Number(intent.contactAttempts || 1)),
+      lastDeliveryError: String(error.message || error).slice(0, 200),
+    });
+    return { retryScheduled: true };
+  }
+}
+
+let contactRecoveryRunning = false;
+async function recoverStuckContactStarts() {
+  if (contactRecoveryRunning || process.env.WHATSAPP_FLOW_ENABLED !== "true") return;
+  contactRecoveryRunning = true;
+  try {
+    const now = Date.now();
+    const candidates = readWhatsappIntents().filter((intent) => {
+      if (!["contact_retry_pending", "contact_sent", "sending_contact"].includes(intent.state)) return false;
+      if (intent.nextRetryAt) return Date.parse(intent.nextRetryAt) <= now;
+      return ["sending_contact", "contact_sent"].includes(intent.state)
+        && Date.parse(intent.updatedAt || 0) <= now - 30_000;
+    });
+    for (const intent of candidates) {
+      await completeContactStart(intent.phone, intent.messageId);
+    }
+  } finally {
+    contactRecoveryRunning = false;
+  }
+}
+
+const contactRecoveryTimer = setInterval(recoverStuckContactStarts, RECOVERY_SCAN_MS);
+contactRecoveryTimer.unref();
 
 async function sendRaffleMedia(phone) {
   if (!CONFIG.shareMedia) throw new Error("Raffle media is not configured");
@@ -314,17 +434,11 @@ app.post("/api/integrations/wpsender/events", async (req, res) => {
     if (isRaffleKeyword) {
       const alreadyEntered = readEntries().some((entry) => entry.phone === phone);
       if (intentState === "contact_sent" && intent?.messageId === messageId) {
-        try {
-          await sendViaWpsender({
-            to: phone,
-            type: "text",
-            message: "איש הקשר נשלח. שמרו אותו בטלפון, וכשסיימתם שלחו כאן את המילה שמרתי.",
-          });
-          updateWhatsappIntent(phone, { state: "awaiting_saved" });
+        const recoveryResult = await completeContactStart(phone, messageId);
+        if (recoveryResult.delivered) {
           return res.status(202).json({ ok: true, contactSent: true, next: "awaiting_saved" });
-        } catch {
-          return res.status(502).json({ error: "raffle contact instruction failed" });
         }
+        return res.status(202).json({ ok: true, retryScheduled: true, next: "contact_sent" });
       }
       if (intent && messageId && intent.messageId === messageId) {
         return res.json({
@@ -337,44 +451,35 @@ app.post("/api/integrations/wpsender/events", async (req, res) => {
       const referralMatch = inboundText.match(/\bref=([+\d()-]+)/i);
       const referredBy = referralMatch ? normalizePhone(referralMatch[1]) : null;
       const restarted = Boolean(intent || alreadyEntered);
-      const previousIntent = intent ? { ...intent } : null;
       const now = new Date().toISOString();
       const nextIntent = {
         phone,
         referredBy: referredBy && referredBy !== phone ? referredBy : (intent?.referredBy || null),
         messageId,
         state: "sending_contact",
+        contactAttempts: 0,
+        nextRetryAt: null,
+        lastDeliveryError: null,
         createdAt: intent?.createdAt || now,
         updatedAt: now,
       };
       if (intent) Object.assign(intent, nextIntent);
       else intents.push(nextIntent);
       writeWhatsappIntents(intents);
-      try {
-        await sendRaffleContact(phone);
-        updateWhatsappIntent(phone, { state: "contact_sent" });
-        await sendViaWpsender({
-          to: phone,
-          type: "text",
-          message: "איש הקשר נשלח. שמרו אותו בטלפון, וכשסיימתם שלחו כאן את המילה שמרתי.",
-        });
-        updateWhatsappIntent(phone, { state: "awaiting_saved" });
+      const deliveryResult = await completeContactStart(phone, messageId);
+      if (deliveryResult.delivered) {
         return res.status(202).json({
           ok: true,
           contactSent: true,
           ...(restarted ? { restarted: true } : {}),
           next: "awaiting_saved",
         });
-      } catch {
-        const currentIntents = readWhatsappIntents();
-        const currentIndex = currentIntents.findIndex((item) => item.phone === phone);
-        if (currentIndex !== -1 && currentIntents[currentIndex].state === "sending_contact") {
-          if (previousIntent) currentIntents[currentIndex] = previousIntent;
-          else currentIntents.splice(currentIndex, 1);
-          writeWhatsappIntents(currentIntents);
-        }
-        return res.status(502).json({ error: "raffle contact delivery failed" });
       }
+      return res.status(202).json({
+        ok: true,
+        retryScheduled: true,
+        next: readWhatsappIntents().find((item) => item.phone === phone)?.state || "contact_retry_pending",
+      });
     }
 
     if (inboundText === "שמרתי" && intent) {

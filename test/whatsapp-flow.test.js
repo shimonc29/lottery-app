@@ -18,6 +18,7 @@ let adminCookie;
 let fakeWpsender;
 let fakeWpsenderBaseUrl;
 let sentWpsenderRequests = [];
+let failNextContactSends = 0;
 
 function getFreePort() {
   return new Promise((resolve, reject) => {
@@ -89,7 +90,13 @@ test.before(async () => {
         && req.headers.authorization === "Bearer test-api-key") {
       const chunks = [];
       for await (const chunk of req) chunks.push(chunk);
-      sentWpsenderRequests.push(JSON.parse(Buffer.concat(chunks).toString("utf8")));
+      const requestBody = JSON.parse(Buffer.concat(chunks).toString("utf8"));
+      sentWpsenderRequests.push(requestBody);
+      if (requestBody.type === "document" && failNextContactSends > 0) {
+        failNextContactSends -= 1;
+        res.writeHead(503, { "content-type": "application/json" });
+        return res.end(JSON.stringify({ error: "temporary WhatsApp failure" }));
+      }
       res.writeHead(200, { "content-type": "application/json" });
       return res.end(JSON.stringify({ ok: true, messageId: `sent-${sentWpsenderRequests.length}` }));
     }
@@ -122,6 +129,8 @@ test.before(async () => {
       SESSION_SECRET: "test-session-secret",
       ADMIN_USER: "test-admin",
       ADMIN_PASSWORD: "test-password",
+      WPSENDER_CONTACT_RETRY_DELAYS_MS: "25,50",
+      WPSENDER_RECOVERY_SCAN_MS: "10",
     },
     stdio: "ignore",
   });
@@ -180,12 +189,14 @@ test("handles concurrent duplicate keyword webhooks only once", async () => {
     buffer: sentWpsenderRequests[0].buffer,
     mimetype: "text/vcard",
     fileName: "contact.vcf",
+    idempotencyKey: "raffle:972501234567:keyword-message-1:contact",
   });
   assert.match(Buffer.from(sentWpsenderRequests[0].buffer, "base64").toString("utf8"), /BEGIN:VCARD/);
   assert.deepEqual(sentWpsenderRequests[1], {
     to: "972501234567",
     type: "text",
     message: sentWpsenderRequests[1].message,
+    idempotencyKey: "raffle:972501234567:keyword-message-1:contact-instruction",
   });
   assert.match(sentWpsenderRequests[1].message, /שמרתי/);
 });
@@ -503,4 +514,86 @@ test("a new raffle keyword restarts the flow for an existing participant", async
 
   const entries = JSON.parse(fs.readFileSync(path.join(dataDir, "data.json"), "utf8"));
   assert.equal(entries.filter((entry) => entry.phone === "972501234567").length, 1);
+});
+
+test("automatically retries a failed contact delivery without requiring another inbound message", async () => {
+  const phone = "972509876543";
+  const config = await (await fetch(`${baseUrl}/api/config`)).json();
+  failNextContactSends = 1;
+  const response = await sendWebhook({
+    event: "message.inbound",
+    timestamp: "2026-07-14T09:29:00.000Z",
+    userId: WPSENDER_USER_ID,
+    data: {
+      messageId: "keyword-retry-1",
+      from: `${phone}@s.whatsapp.net`,
+      text: config.whatsappKeyword,
+      mediaType: "conversation",
+      hasMedia: false,
+    },
+  });
+
+  assert.equal(response.status, 202);
+  assert.deepEqual(await response.json(), {
+    ok: true,
+    retryScheduled: true,
+    next: "contact_retry_pending",
+  });
+
+  const deadline = Date.now() + 2_000;
+  while (Date.now() < deadline) {
+    const phoneRequests = sentWpsenderRequests.filter((item) => item.to === phone);
+    if (phoneRequests.filter((item) => item.type === "document").length >= 2
+        && phoneRequests.some((item) => item.type === "text")) break;
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  }
+
+  const phoneRequests = sentWpsenderRequests.filter((item) => item.to === phone);
+  assert.equal(phoneRequests.filter((item) => item.type === "document").length, 2);
+  assert.equal(phoneRequests.filter((item) => item.type === "text").length, 1);
+  assert.equal(phoneRequests[0].idempotencyKey, phoneRequests[1].idempotencyKey);
+  assert.match(phoneRequests[0].idempotencyKey, /keyword-retry-1:contact$/);
+
+  const intent = JSON.parse(fs.readFileSync(path.join(dataDir, "whatsapp-intents.json"), "utf8"))
+    .find((item) => item.phone === phone);
+  assert.equal(intent.state, "awaiting_saved");
+  assert.equal(intent.nextRetryAt, null);
+});
+
+test("falls back to written contact details after repeated vCard failures", async () => {
+  const phone = "972508765432";
+  const config = await (await fetch(`${baseUrl}/api/config`)).json();
+  failNextContactSends = 3;
+  const response = await sendWebhook({
+    event: "message.inbound",
+    timestamp: "2026-07-14T09:28:00.000Z",
+    userId: WPSENDER_USER_ID,
+    data: {
+      messageId: "keyword-fallback-1",
+      from: `${phone}@s.whatsapp.net`,
+      text: config.whatsappKeyword,
+      mediaType: "conversation",
+      hasMedia: false,
+    },
+  });
+  assert.equal(response.status, 202);
+
+  const deadline = Date.now() + 2_000;
+  while (Date.now() < deadline) {
+    const phoneRequests = sentWpsenderRequests.filter((item) => item.to === phone);
+    if (phoneRequests.some((item) => item.idempotencyKey?.endsWith(":contact-fallback"))) break;
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  }
+
+  const phoneRequests = sentWpsenderRequests.filter((item) => item.to === phone);
+  assert.equal(phoneRequests.filter((item) => item.type === "document").length, 3);
+  const fallback = phoneRequests.find((item) => item.idempotencyKey?.endsWith(":contact-fallback"));
+  assert.ok(fallback);
+  assert.match(fallback.message, /972586904058/);
+  assert.match(fallback.message, /שמרתי/);
+
+  const intent = JSON.parse(fs.readFileSync(path.join(dataDir, "whatsapp-intents.json"), "utf8"))
+    .find((item) => item.phone === phone);
+  assert.equal(intent.state, "awaiting_saved");
+  assert.equal(intent.contactFallbackUsed, true);
 });
