@@ -222,7 +222,7 @@ test("sends the configured raffle media only after the participant writes saved"
   assert.deepEqual(sentWpsenderRequests[2], {
     to: "972501234567",
     type: "video",
-    buffer: Buffer.from("test-video-bytes").toString("base64"),
+    mediaUrl: `${fakeWpsenderBaseUrl}/raffle-media.mp4`,
     mimetype: "video/mp4",
     caption: sentWpsenderRequests[2].caption,
   });

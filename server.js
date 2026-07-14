@@ -239,13 +239,26 @@ async function sendRaffleContact(phone) {
 
 async function sendRaffleMedia(phone) {
   if (!CONFIG.shareMedia) throw new Error("Raffle media is not configured");
-  const mediaResponse = await fetch(getShareMediaUrl(), { signal: AbortSignal.timeout(15_000) });
-  if (!mediaResponse.ok) throw new Error(`Raffle media download failed (${mediaResponse.status})`);
-  const mimeType = mediaResponse.headers.get("content-type") || "video/mp4";
+  const mediaUrl = getShareMediaUrl();
+  const extension = path.extname(new URL(mediaUrl).pathname).toLowerCase();
+  const imageMimeTypes = {
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".png": "image/png",
+    ".webp": "image/webp",
+    ".gif": "image/gif",
+  };
+  const videoMimeTypes = {
+    ".mp4": "video/mp4",
+    ".mov": "video/quicktime",
+    ".webm": "video/webm",
+    ".3gp": "video/3gpp",
+  };
+  const mimeType = imageMimeTypes[extension] || videoMimeTypes[extension] || "video/mp4";
   await sendViaWpsender({
     to: phone,
     type: mimeType.startsWith("image/") ? "image" : "video",
-    buffer: Buffer.from(await mediaResponse.arrayBuffer()).toString("base64"),
+    mediaUrl,
     mimetype: mimeType.split(";", 1)[0],
     caption: `שתפו בסטטוס כדי להשתתף בהגרלה של ${CONFIG.businessName}`,
   });
