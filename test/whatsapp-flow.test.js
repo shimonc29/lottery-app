@@ -226,8 +226,8 @@ test("sends the configured raffle media only after the participant writes saved"
     mimetype: "video/mp4",
     caption: sentWpsenderRequests[2].caption,
   });
-  const personalShareLink = `${fakeWpsenderBaseUrl}/?ref=972501234567`;
-  assert.match(sentWpsenderRequests[2].caption, /קישור השיתוף האישי/);
+  const personalShareLink = `https://wa.me/972586904058?text=${encodeURIComponent("הגרלה ref=972501234567")}`;
+  assert.match(sentWpsenderRequests[2].caption, /משתתפים עכשיו בהגרלה על פרס שווה במיוחד/);
   assert.ok(sentWpsenderRequests[2].caption.includes(personalShareLink));
   assert.deepEqual(sentWpsenderRequests[3], {
     to: "972501234567",
@@ -469,7 +469,8 @@ test("an admin approval turns the verified proof into an eligible entry", async 
   assert.match(sentWpsenderRequests[6].message, /אתה בהגרלה/);
   assert.match(sentWpsenderRequests[6].message, /כרטיסים: 1/);
   assert.match(sentWpsenderRequests[6].message, /\?check=972501234567/);
-  assert.match(sentWpsenderRequests[6].message, /\?ref=972501234567/);
+  const approvedShareLink = `https://wa.me/972586904058?text=${encodeURIComponent("הגרלה ref=972501234567")}`;
+  assert.ok(sentWpsenderRequests[6].message.includes(approvedShareLink));
 });
 
 test("a new raffle keyword restarts the flow for an existing participant", async () => {

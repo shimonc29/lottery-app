@@ -225,14 +225,15 @@ function getShareMediaUrl() {
 }
 
 function getPersonalShareLink(phone) {
-  const publicBaseUrl = String(process.env.PUBLIC_BASE_URL || "").replace(/\/$/, "");
-  if (!publicBaseUrl) throw new Error("PUBLIC_BASE_URL is required for personal share links");
-  return `${publicBaseUrl}/?ref=${encodeURIComponent(phone)}`;
+  const whatsappPhone = normalizePhone(CONFIG.clientPhone);
+  const raffleKeyword = process.env.WPSENDER_RAFFLE_KEYWORD || "הגרלה";
+  const prefilledMessage = `${raffleKeyword} ref=${phone}`;
+  return `https://wa.me/${whatsappPhone}?text=${encodeURIComponent(prefilledMessage)}`;
 }
 
 function getShareInstructions(phone) {
   const personalShareLink = getPersonalShareLink(phone);
-  return `הקובץ והקישור האישי שלך נשלחו. העלו את שניהם לסטטוס:\n${personalShareLink}\n\nכשתסיימו שלחו כאן את המילה שיתפתי.`;
+  return `הקובץ מוכן לשיתוף. לחצו "העבר", בחרו "הסטטוס שלי" וודאו שהכיתוב והקישור מצורפים:\n${personalShareLink}\n\nכשתסיימו שלחו כאן את המילה שיתפתי.`;
 }
 
 async function sendRaffleContact(phone) {
@@ -276,7 +277,7 @@ async function sendRaffleMedia(phone) {
     type: mimeType.startsWith("image/") ? "image" : "video",
     mediaUrl,
     mimetype: mimeType.split(";", 1)[0],
-    caption: `שתפו בסטטוס כדי להשתתף בהגרלה של ${CONFIG.businessName}\n\nקישור השיתוף האישי שלך:\n${personalShareLink}`,
+    caption: `משתתפים עכשיו בהגרלה על ${CONFIG.prizeText}\n\nרוצים להשתתף גם? לחצו כאן ושלחו את ההודעה המוכנה:\n${personalShareLink}`,
   });
 }
 
@@ -581,6 +582,7 @@ app.post("/admin/api/entries/:id/approve", auth, async (req, res) => {
   if (!publicBaseUrl) return res.status(503).json({ error: "public URL is not configured" });
   const referrals = entries.filter((item) => isApprovedEntry(item) && item.referredBy === entry.phone).length;
   const tickets = 1 + referrals;
+  const personalShareLink = getPersonalShareLink(entry.phone);
   const previousStatus = entry.status || "pending_review";
   entry.status = "approving";
   writeEntries(entries);
@@ -588,7 +590,7 @@ app.post("/admin/api/entries/:id/approve", auth, async (req, res) => {
     await sendViaWpsender({
       to: entry.phone,
       type: "text",
-      message: `אושר! ${entry.name || ""}, אתה בהגרלה של ${CONFIG.businessName}!\nכרטיסים: ${tickets}\nבדיקת כרטיסים: ${publicBaseUrl}/?check=${entry.phone}#check-card\nקישור השיתוף שלך: ${publicBaseUrl}/?ref=${entry.phone}`,
+      message: `אושר! ${entry.name || ""}, אתה בהגרלה של ${CONFIG.businessName}!\nכרטיסים: ${tickets}\nבדיקת כרטיסים: ${publicBaseUrl}/?check=${entry.phone}#check-card\nקישור השיתוף שלך: ${personalShareLink}`,
     });
     entry.status = "approved";
     entry.approvedAt = new Date().toISOString();
