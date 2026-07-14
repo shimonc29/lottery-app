@@ -19,7 +19,10 @@ const upload = multer({ storage, limits: { fileSize: 50 * 1024 * 1024 } }); // 5
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-const DATA_FILE     = path.join(UPLOADS_DIR, "data.json");
+const DATA_DIR      = process.env.RAFFLE_DATA_DIR || UPLOADS_DIR;
+if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+const DATA_FILE     = path.join(DATA_DIR, "data.json");
+const WHATSAPP_INTENTS_FILE = path.join(DATA_DIR, "whatsapp-intents.json");
 const SETTINGS_FILE = path.join(UPLOADS_DIR, "settings.json");
 
 /* ---------- הגדרות ---------- */
@@ -50,6 +53,18 @@ function readEntries() {
 function writeEntries(list) {
   fs.writeFileSync(DATA_FILE, JSON.stringify(list, null, 2));
 }
+function readWhatsappIntents() {
+  try { return JSON.parse(fs.readFileSync(WHATSAPP_INTENTS_FILE, "utf8")); }
+  catch { return []; }
+}
+function writeWhatsappIntents(list) {
+  fs.writeFileSync(WHATSAPP_INTENTS_FILE, JSON.stringify(list, null, 2));
+}
+
+// Entries created before the WhatsApp approval flow have no status and remain eligible.
+function isApprovedEntry(entry) {
+  return !entry.status || entry.status === "approved";
+}
 
 /* ---------- נירמול טלפון ---------- */
 function normalizePhone(raw) {
@@ -59,7 +74,11 @@ function normalizePhone(raw) {
   return p;
 }
 
-app.use(express.json());
+app.use(express.json({
+  verify: (req, _res, buffer) => {
+    req.rawBody = Buffer.from(buffer);
+  },
+}));
 app.use(express.static(path.join(__dirname, "public")));
 app.use(session({
   secret: process.env.SESSION_SECRET || "raffle-secret-key-2024",
@@ -81,10 +100,15 @@ app.get("/api/config", (req, res) => {
     drawDate:     CONFIG.drawDate,
     heroImage:    CONFIG.heroImage,
     shareMedia:   CONFIG.shareMedia,
+    whatsappFlowEnabled: process.env.WHATSAPP_FLOW_ENABLED === "true",
+    whatsappKeyword: process.env.WPSENDER_RAFFLE_KEYWORD || "הגרלה",
   });
 });
 
 app.post("/api/enter", (req, res) => {
+  if (process.env.WHATSAPP_FLOW_ENABLED === "true") {
+    return res.status(409).json({ error: "whatsapp_flow_required" });
+  }
   const { name, phone, consent, ref } = req.body || {};
   if (!name || !phone) return res.status(400).json({ error: "יש למלא שם וטלפון" });
   if (!consent)        return res.status(400).json({ error: "יש לאשר את התקנון" });
@@ -113,7 +137,7 @@ app.post("/api/enter", (req, res) => {
 app.get("/api/referrals/:phone", (req, res) => {
   const phone = normalizePhone(req.params.phone);
   const entries = readEntries();
-  const count = entries.filter(e => e.referredBy === phone).length;
+  const count = entries.filter(e => isApprovedEntry(e) && e.referredBy === phone).length;
   res.json({ count });
 });
 
@@ -123,7 +147,8 @@ app.get("/api/tickets/:phone", (req, res) => {
   const entries = readEntries();
   const me = entries.find(e => e.phone === phone);
   if (!me) return res.json({ found: false });
-  const referrals = entries.filter(e => e.referredBy === phone).length;
+  if (!isApprovedEntry(me)) return res.json({ found: false, pending: true });
+  const referrals = entries.filter(e => isApprovedEntry(e) && e.referredBy === phone).length;
   res.json({ found: true, name: me.name, tickets: 1 + referrals, referrals });
 });
 
@@ -138,6 +163,162 @@ app.get("/contact.vcf", (req, res) => {
   res.setHeader("Content-Type", "text/vcard; charset=utf-8");
   res.setHeader("Content-Disposition", 'attachment; filename="contact.vcf"');
   res.send(vcf);
+});
+
+/* ============================================================
+   WPSender integration (disabled unless explicitly enabled)
+   ============================================================ */
+function hasValidWpsenderSignature(req) {
+  const secret = process.env.WPSENDER_WEBHOOK_SECRET;
+  const received = req.get("x-webhook-signature") || "";
+  if (!secret || !received || !req.rawBody) return false;
+
+  const expected = require("crypto")
+    .createHmac("sha256", secret)
+    .update(req.rawBody)
+    .digest("hex");
+  const expectedBuffer = Buffer.from(expected, "utf8");
+  const receivedBuffer = Buffer.from(received, "utf8");
+  return expectedBuffer.length === receivedBuffer.length
+    && require("crypto").timingSafeEqual(expectedBuffer, receivedBuffer);
+}
+
+async function sendViaWpsender(body) {
+  const baseUrl = String(process.env.WPSENDER_BASE_URL || "").replace(/\/$/, "");
+  const apiKey = process.env.WPSENDER_API_KEY;
+  if (!baseUrl || !apiKey) throw new Error("WPSender is not configured");
+
+  const response = await fetch(`${baseUrl}/api/raffle/send`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(body),
+    signal: AbortSignal.timeout(15_000),
+  });
+  if (!response.ok) throw new Error(`WPSender send failed (${response.status})`);
+  return response.json();
+}
+
+async function sendRaffleKit(phone) {
+  await sendViaWpsender({
+    to: phone,
+    type: "text",
+    message: "ברוכים הבאים להגרלה! שמרו את איש הקשר המצורף, שתפו את הסרטון או התמונה בסטטוס, ואז שלחו כאן צילום מסך שמראה שהסטטוס פעיל. לאחר בדיקה תקבלו אישור שנכנסתם להגרלה.",
+  });
+
+  const vcf = [
+    "BEGIN:VCARD", "VERSION:3.0",
+    `N:;${CONFIG.clientName};;;`,
+    `FN:${CONFIG.clientName}`,
+    `TEL;TYPE=CELL:+${CONFIG.clientPhone}`,
+    "END:VCARD", "",
+  ].join("\r\n");
+  await sendViaWpsender({
+    to: phone,
+    type: "document",
+    buffer: Buffer.from(vcf, "utf8").toString("base64"),
+    mimetype: "text/vcard",
+    fileName: "contact.vcf",
+  });
+
+  if (CONFIG.shareMedia) {
+    const mediaResponse = await fetch(CONFIG.shareMedia, { signal: AbortSignal.timeout(15_000) });
+    if (!mediaResponse.ok) throw new Error(`Raffle media download failed (${mediaResponse.status})`);
+    const mimeType = mediaResponse.headers.get("content-type") || "video/mp4";
+    await sendViaWpsender({
+      to: phone,
+      type: mimeType.startsWith("image/") ? "image" : "video",
+      buffer: Buffer.from(await mediaResponse.arrayBuffer()).toString("base64"),
+      mimetype: mimeType.split(";", 1)[0],
+      caption: `שתפו בסטטוס כדי להשתתף בהגרלה של ${CONFIG.businessName}`,
+    });
+  }
+}
+
+app.post("/api/integrations/wpsender/events", async (req, res) => {
+  if (process.env.WHATSAPP_FLOW_ENABLED !== "true") return res.sendStatus(404);
+  if (!hasValidWpsenderSignature(req)) {
+    return res.status(401).json({ error: "invalid signature" });
+  }
+
+  const payload = req.body || {};
+  const data = payload.data || {};
+  if (payload.userId !== process.env.WPSENDER_USER_ID) {
+    return res.status(403).json({ error: "unexpected tenant" });
+  }
+  const raffleKeyword = process.env.WPSENDER_RAFFLE_KEYWORD || "הגרלה";
+  const inboundText = String(data.text || "").trim();
+  if (payload.event === "message.inbound" && !data.hasMedia
+      && (inboundText === raffleKeyword || inboundText.startsWith(`${raffleKeyword} `))) {
+    const phone = normalizePhone(String(data.from || "").split("@")[0]);
+    if (phone.length < 11) return res.status(400).json({ error: "invalid sender phone" });
+    const intents = readWhatsappIntents();
+    if (data.messageId && intents.some((intent) => intent.messageId === String(data.messageId))) {
+      return res.json({ ok: true, duplicate: true });
+    }
+    const referralMatch = inboundText.match(/\bref=([+\d()-]+)/i);
+    const referredBy = referralMatch ? normalizePhone(referralMatch[1]) : null;
+    try {
+      await sendRaffleKit(phone);
+      const previousIntent = intents.find((intent) => intent.phone === phone);
+      const nextIntent = {
+        phone,
+        referredBy: referredBy && referredBy !== phone ? referredBy : null,
+        messageId: data.messageId ? String(data.messageId) : null,
+        createdAt: new Date().toISOString(),
+      };
+      if (previousIntent) Object.assign(previousIntent, nextIntent);
+      else intents.push(nextIntent);
+      writeWhatsappIntents(intents);
+      return res.status(202).json({ ok: true, kitSent: true });
+    } catch {
+      return res.status(502).json({ error: "raffle kit delivery failed" });
+    }
+  }
+  if (payload.event !== "message.inbound" || !data.hasMedia || data.mediaType !== "imageMessage") {
+    return res.status(202).json({ ok: true, ignored: true });
+  }
+  if (!data.messageId || !data.from) {
+    return res.status(400).json({ error: "missing message data" });
+  }
+
+  const entries = readEntries();
+  if (entries.some((entry) => entry.proofMessageId === data.messageId)) {
+    return res.json({ ok: true, duplicate: true });
+  }
+
+  const phone = normalizePhone(String(data.from).split("@")[0]);
+  if (phone.length < 11) return res.status(400).json({ error: "invalid sender phone" });
+
+  const existing = entries.find((entry) => entry.phone === phone);
+  const intents = readWhatsappIntents();
+  const intent = intents.find((item) => item.phone === phone);
+  const proofReceivedAt = data.timestamp || payload.timestamp || new Date().toISOString();
+  if (existing) {
+    existing.proofMessageId = String(data.messageId);
+    existing.proofMimeType = data.mimeType || null;
+    existing.proofReceivedAt = proofReceivedAt;
+    existing.source = existing.source || "whatsapp";
+    if (existing.status && existing.status !== "approved") existing.status = "pending_review";
+  } else {
+    entries.push({
+      id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+      name: String(data.senderName || phone).trim().slice(0, 80),
+      phone,
+      referredBy: intent?.referredBy || null,
+      status: "pending_review",
+      source: "whatsapp",
+      proofMessageId: String(data.messageId),
+      proofMimeType: data.mimeType || null,
+      proofReceivedAt,
+      createdAt: new Date().toISOString(),
+    });
+  }
+  writeEntries(entries);
+  if (intent) writeWhatsappIntents(intents.filter((item) => item.phone !== phone));
+  res.status(202).json({ ok: true, status: existing?.status || "pending_review" });
 });
 
 /* ============================================================
@@ -184,8 +365,58 @@ app.delete("/admin/api/entries/:id", auth, (req, res) => {
   res.json({ ok: true });
 });
 
-app.get("/admin/api/draw", auth, (req, res) => {
+app.get("/admin/api/entries/:id/proof", auth, async (req, res) => {
+  const entry = readEntries().find((item) => item.id === req.params.id);
+  if (!entry || !entry.proofMessageId) {
+    return res.status(404).json({ error: "proof not found" });
+  }
+  const baseUrl = String(process.env.WPSENDER_BASE_URL || "").replace(/\/$/, "");
+  const apiKey = process.env.WPSENDER_API_KEY;
+  if (!baseUrl || !apiKey) {
+    return res.status(503).json({ error: "proof service is not configured" });
+  }
+
+  try {
+    const response = await fetch(
+      `${baseUrl}/api/raffle/messages/${encodeURIComponent(entry.proofMessageId)}/media`,
+      {
+        headers: { Authorization: `Bearer ${apiKey}` },
+        signal: AbortSignal.timeout(10_000),
+      },
+    );
+    if (!response.ok) return res.status(502).json({ error: "proof service failed" });
+
+    const contentType = response.headers.get("content-type") || entry.proofMimeType || "application/octet-stream";
+    res.setHeader("Content-Type", contentType);
+    res.setHeader("Cache-Control", "private, no-store");
+    res.setHeader("Content-Disposition", "inline");
+    res.send(Buffer.from(await response.arrayBuffer()));
+  } catch {
+    res.status(502).json({ error: "proof service unavailable" });
+  }
+});
+
+app.post("/admin/api/entries/:id/approve", auth, async (req, res) => {
   const entries = readEntries();
+  const entry = entries.find((item) => item.id === req.params.id);
+  if (!entry) return res.status(404).json({ error: "entry not found" });
+  entry.status = "approved";
+  entry.approvedAt = new Date().toISOString();
+  writeEntries(entries);
+  try {
+    await sendViaWpsender({
+      to: entry.phone,
+      type: "text",
+      message: `אושר! ${entry.name || ""} נכנסת להגרלה של ${CONFIG.businessName}. בהצלחה!`,
+    });
+  } catch (error) {
+    console.error("Participant approved, but confirmation message failed:", error.message);
+  }
+  res.json({ ok: true, status: entry.status });
+});
+
+app.get("/admin/api/draw", auth, (req, res) => {
+  const entries = readEntries().filter(isApprovedEntry);
   if (!entries.length) return res.json({ winner: null });
 
   // בניית "קלפי הגרלה" משוקללים — כרטיס אחד לכל הפניה
@@ -252,7 +483,7 @@ app.post("/admin/api/settings", auth, (req, res) => {
 });
 
 app.get("/admin/export.vcf", auth, (req, res) => {
-  const entries = readEntries();
+  const entries = readEntries().filter(isApprovedEntry);
   const vcf = entries.map((e) => [
     "BEGIN:VCARD", "VERSION:3.0",
     `N:;${CONFIG.contactPrefix} ${e.name};;;`,
@@ -266,7 +497,7 @@ app.get("/admin/export.vcf", auth, (req, res) => {
 });
 
 app.get("/admin/export.csv", auth, (req, res) => {
-  const entries = readEntries();
+  const entries = readEntries().filter(isApprovedEntry);
   const rows = [["שם", "טלפון", "תאריך"]].concat(
     entries.map((e) => [e.name, e.phone, new Date(e.createdAt).toLocaleString("he-IL")])
   );

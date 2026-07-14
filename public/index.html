@@ -357,7 +357,16 @@
     document.getElementById("biz").textContent = cfg.businessName;
     document.getElementById("biz2").textContent = cfg.businessName;
     document.getElementById("prize").textContent = cfg.prizeText;
-    if (cfg.shareMedia) {
+    if (cfg.whatsappFlowEnabled) {
+      const startButton = document.getElementById("btn-channel");
+      document.querySelector("#step1 .title").textContent = "התחילו את ההשתתפות בוואטסאפ 💬";
+      document.querySelector("#step1 .sub").textContent = "שלחו את מילת ההגרלה וקבלו מיד את איש הקשר והסרטון או התמונה לשיתוף";
+      startButton.textContent = "פתיחה בוואטסאפ";
+      const startText = (cfg.whatsappKeyword || "הגרלה") + (urlRef ? " ref=" + urlRef : "");
+      startButton.href = "https://wa.me/" + cfg.clientPhone + "?text=" + encodeURIComponent(startText);
+      document.querySelector("#step2 .sub").textContent = "פתחו בוואטסאפ את קובץ איש הקשר שקיבלתם ושמרו אותו. הכפתור הוא גיבוי להורדה ישירה";
+      document.querySelector(".form-card").style.display = "none";
+    } else if (cfg.shareMedia) {
       const btn = document.getElementById("btn-channel");
       btn.textContent = "📤 שתפו לסטטוס";
       btn.removeAttribute("href");

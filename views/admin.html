@@ -32,7 +32,7 @@
   .pane { display: none; }
   .pane.active { display: block; }
 
-  .stats { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-bottom: 18px; }
+  .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 18px; }
   .stat { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 16px 18px; }
   .stat .n { font-family: "Suez One", serif; font-size: 34px; color: var(--gold); line-height: 1; }
   .stat .l { font-size: 13px; color: var(--muted); margin-top: 4px; }
@@ -67,6 +67,11 @@
   tr:last-child td { border-bottom: none; }
   .del { background: none; border: none; color: var(--red); cursor: pointer; font-size: 18px; opacity: .7; }
   .del:hover { opacity: 1; }
+  .approve { background: var(--forest); color: #fff; border: none; border-radius: 8px; padding: 7px 10px; cursor: pointer; font-weight: 800; }
+  .proof { color: var(--gold); text-decoration: none; font-size: 13px; font-weight: 800; white-space: nowrap; }
+  .status { display: inline-block; border-radius: 999px; padding: 4px 9px; font-size: 12px; font-weight: 800; white-space: nowrap; }
+  .status-approved { color: #5de0a0; background: rgba(93,224,160,.12); }
+  .status-pending { color: var(--gold); background: rgba(217,164,65,.12); }
   .empty { text-align: center; color: var(--muted); padding: 40px; }
 
   .settings-card {
@@ -124,6 +129,7 @@
       <div class="stats">
         <div class="stat"><div class="n" id="count">0</div><div class="l">משתתפים בהגרלה</div></div>
         <div class="stat"><div class="n" id="today">0</div><div class="l">נרשמו היום</div></div>
+        <div class="stat"><div class="n" id="pending">0</div><div class="l">ממתינים לאישור</div></div>
       </div>
 
       <div class="actions">
@@ -141,7 +147,7 @@
       </div>
 
       <table>
-        <thead><tr><th>שם</th><th>טלפון</th><th>🎟️ כרטיסים</th><th>תאריך הרשמה</th><th></th></tr></thead>
+        <thead><tr><th>שם</th><th>טלפון</th><th>סטטוס</th><th>🎟️ כרטיסים</th><th>תאריך הרשמה</th><th></th></tr></thead>
         <tbody id="rows"></tbody>
       </table>
       <div class="empty" id="empty" style="display:none">עדיין אין משתתפים</div>
@@ -240,10 +246,13 @@
   async function load() {
     const res = await fetch("/admin/api/entries");
     const list = await res.json();
-    document.getElementById("count").textContent = list.length;
+    const approved = list.filter(e => !e.status || e.status === "approved");
+    const pending = list.filter(e => e.status === "pending_review");
+    document.getElementById("count").textContent = approved.length;
+    document.getElementById("pending").textContent = pending.length;
     const todayStr = new Date().toDateString();
     document.getElementById("today").textContent =
-      list.filter(e => new Date(e.createdAt).toDateString() === todayStr).length;
+      approved.filter(e => new Date(e.createdAt).toDateString() === todayStr).length;
 
     const rows = document.getElementById("rows");
     rows.innerHTML = "";
@@ -251,25 +260,44 @@
 
     // ספירת הפניות לכל משתתף
     const refMap = {};
-    for (const e of list) {
+    for (const e of approved) {
       if (e.referredBy) refMap[e.referredBy] = (refMap[e.referredBy] || 0) + 1;
     }
 
     for (const e of list) {
       const tr = document.createElement("tr");
       const d = new Date(e.createdAt).toLocaleString("he-IL", { dateStyle: "short", timeStyle: "short" });
-      const tickets = 1 + (refMap[e.phone] || 0);
-      const ticketsLabel = tickets > 1
+      const isApproved = !e.status || e.status === "approved";
+      const tickets = isApproved ? 1 + (refMap[e.phone] || 0) : 0;
+      const ticketsLabel = !isApproved
+        ? `<span style="color:var(--muted)">—</span>`
+        : tickets > 1
         ? `<span style="color:var(--gold);font-weight:800">${tickets} 🎟️</span>`
         : `<span style="color:var(--muted)">1</span>`;
+      const statusLabel = isApproved
+        ? `<span class="status status-approved">מאושר</span>`
+        : `<span class="status status-pending">ממתין לבדיקה</span>`;
+      const approveButton = isApproved ? "" : `<button class="approve" data-id="${e.id}">אישור</button>`;
+      const proofButton = e.proofMessageId
+        ? `<a class="proof" href="/admin/api/entries/${e.id}/proof" target="_blank" rel="noopener">צילום</a>`
+        : "";
       tr.innerHTML = `
         <td>${esc(e.name)}</td>
         <td class="phone">+${e.phone}</td>
+        <td>${statusLabel}</td>
         <td style="text-align:center">${ticketsLabel}</td>
         <td>${d}</td>
-        <td><button class="del" title="מחיקה" data-id="${e.id}">🗑</button></td>`;
+        <td>${proofButton} ${approveButton} <button class="del" title="מחיקה" data-id="${e.id}">🗑</button></td>`;
       rows.appendChild(tr);
     }
+    document.querySelectorAll(".approve").forEach(b =>
+      b.addEventListener("click", async () => {
+        if (!confirm("לאשר את צילום המסך ולהכניס את המשתתף להגרלה?")) return;
+        const response = await fetch("/admin/api/entries/" + b.dataset.id + "/approve", { method: "POST" });
+        if (!response.ok) return alert("האישור נכשל, נסו שוב");
+        load();
+      })
+    );
     document.querySelectorAll(".del").forEach(b =>
       b.addEventListener("click", async () => {
         if (!confirm("למחוק את המשתתף?")) return;
