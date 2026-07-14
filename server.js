@@ -60,6 +60,17 @@ function readWhatsappIntents() {
 function writeWhatsappIntents(list) {
   fs.writeFileSync(WHATSAPP_INTENTS_FILE, JSON.stringify(list, null, 2));
 }
+function updateWhatsappIntent(phone, updates) {
+  const intents = readWhatsappIntents();
+  const intent = intents.find((item) => item.phone === phone);
+  if (!intent) return null;
+  Object.assign(intent, updates, { updatedAt: new Date().toISOString() });
+  writeWhatsappIntents(intents);
+  return intent;
+}
+function whatsappIntentState(intent) {
+  return intent?.state || (intent ? "awaiting_saved" : null);
+}
 
 // Entries created before the WhatsApp approval flow have no status and remain eligible.
 function isApprovedEntry(entry) {
@@ -209,13 +220,7 @@ function getShareMediaUrl() {
   return new URL(configured, `${publicBaseUrl}/`).toString();
 }
 
-async function sendRaffleKit(phone) {
-  await sendViaWpsender({
-    to: phone,
-    type: "text",
-    message: "ברוכים הבאים להגרלה! שמרו את איש הקשר המצורף, שתפו את הסרטון או התמונה בסטטוס, ואז שלחו כאן צילום מסך שמראה שהסטטוס פעיל. לאחר בדיקה תקבלו אישור שנכנסתם להגרלה.",
-  });
-
+async function sendRaffleContact(phone) {
   const vcf = [
     "BEGIN:VCARD", "VERSION:3.0",
     `N:;${CONFIG.clientName};;;`,
@@ -230,19 +235,20 @@ async function sendRaffleKit(phone) {
     mimetype: "text/vcard",
     fileName: "contact.vcf",
   });
+}
 
-  if (CONFIG.shareMedia) {
-    const mediaResponse = await fetch(getShareMediaUrl(), { signal: AbortSignal.timeout(15_000) });
-    if (!mediaResponse.ok) throw new Error(`Raffle media download failed (${mediaResponse.status})`);
-    const mimeType = mediaResponse.headers.get("content-type") || "video/mp4";
-    await sendViaWpsender({
-      to: phone,
-      type: mimeType.startsWith("image/") ? "image" : "video",
-      buffer: Buffer.from(await mediaResponse.arrayBuffer()).toString("base64"),
-      mimetype: mimeType.split(";", 1)[0],
-      caption: `שתפו בסטטוס כדי להשתתף בהגרלה של ${CONFIG.businessName}`,
-    });
-  }
+async function sendRaffleMedia(phone) {
+  if (!CONFIG.shareMedia) throw new Error("Raffle media is not configured");
+  const mediaResponse = await fetch(getShareMediaUrl(), { signal: AbortSignal.timeout(15_000) });
+  if (!mediaResponse.ok) throw new Error(`Raffle media download failed (${mediaResponse.status})`);
+  const mimeType = mediaResponse.headers.get("content-type") || "video/mp4";
+  await sendViaWpsender({
+    to: phone,
+    type: mimeType.startsWith("image/") ? "image" : "video",
+    buffer: Buffer.from(await mediaResponse.arrayBuffer()).toString("base64"),
+    mimetype: mimeType.split(";", 1)[0],
+    caption: `שתפו בסטטוס כדי להשתתף בהגרלה של ${CONFIG.businessName}`,
+  });
 }
 
 app.post("/api/integrations/wpsender/events", async (req, res) => {
@@ -256,56 +262,167 @@ app.post("/api/integrations/wpsender/events", async (req, res) => {
   if (payload.userId !== process.env.WPSENDER_USER_ID) {
     return res.status(403).json({ error: "unexpected tenant" });
   }
+  const senderJid = String(data.from || "");
+  if (!senderJid.endsWith("@s.whatsapp.net")) {
+    return res.status(202).json({ ok: true, ignored: true });
+  }
   const raffleKeyword = process.env.WPSENDER_RAFFLE_KEYWORD || "הגרלה";
   const inboundText = String(data.text || "").trim();
-  if (payload.event === "message.inbound" && !data.hasMedia
-      && (inboundText === raffleKeyword || inboundText.startsWith(`${raffleKeyword} `))) {
-    const phone = normalizePhone(String(data.from || "").split("@")[0]);
-    if (phone.length < 11) return res.status(400).json({ error: "invalid sender phone" });
-    const intents = readWhatsappIntents();
-    if (data.messageId && intents.some((intent) => intent.messageId === String(data.messageId))) {
-      return res.json({ ok: true, duplicate: true });
-    }
-    const referralMatch = inboundText.match(/\bref=([+\d()-]+)/i);
-    const referredBy = referralMatch ? normalizePhone(referralMatch[1]) : null;
-    try {
-      await sendRaffleKit(phone);
-      const previousIntent = intents.find((intent) => intent.phone === phone);
-      const nextIntent = {
+  const phone = normalizePhone(senderJid.split("@")[0]);
+  if (phone.length < 11) return res.status(400).json({ error: "invalid sender phone" });
+  const messageId = data.messageId ? String(data.messageId) : null;
+
+  if (payload.event === "message.inbound" && !data.hasMedia) {
+    const isRaffleKeyword = inboundText === raffleKeyword
+      || inboundText.startsWith(`${raffleKeyword} `);
+    let intents = readWhatsappIntents();
+    let intent = intents.find((item) => item.phone === phone);
+    let intentState = whatsappIntentState(intent);
+
+    if (isRaffleKeyword) {
+      if (readEntries().some((entry) => entry.phone === phone)) {
+        return res.json({ ok: true, alreadyEntered: true });
+      }
+      if (intentState === "contact_sent" && intent?.messageId === messageId) {
+        try {
+          await sendViaWpsender({
+            to: phone,
+            type: "text",
+            message: "איש הקשר נשלח. שמרו אותו בטלפון, וכשסיימתם שלחו כאן את המילה שמרתי.",
+          });
+          updateWhatsappIntent(phone, { state: "awaiting_saved" });
+          return res.status(202).json({ ok: true, contactSent: true, next: "awaiting_saved" });
+        } catch {
+          return res.status(502).json({ error: "raffle contact instruction failed" });
+        }
+      }
+      if (intent) {
+        return res.json({
+          ok: true,
+          duplicate: intent.messageId === messageId,
+          alreadyStarted: intent.messageId !== messageId,
+          next: intentState,
+        });
+      }
+
+      const referralMatch = inboundText.match(/\bref=([+\d()-]+)/i);
+      const referredBy = referralMatch ? normalizePhone(referralMatch[1]) : null;
+      intent = {
         phone,
         referredBy: referredBy && referredBy !== phone ? referredBy : null,
-        messageId: data.messageId ? String(data.messageId) : null,
+        messageId,
+        state: "sending_contact",
         createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
       };
-      if (previousIntent) Object.assign(previousIntent, nextIntent);
-      else intents.push(nextIntent);
+      intents.push(intent);
       writeWhatsappIntents(intents);
-      return res.status(202).json({ ok: true, kitSent: true });
-    } catch {
-      return res.status(502).json({ error: "raffle kit delivery failed" });
+      try {
+        await sendRaffleContact(phone);
+        updateWhatsappIntent(phone, { state: "contact_sent" });
+        await sendViaWpsender({
+          to: phone,
+          type: "text",
+          message: "איש הקשר נשלח. שמרו אותו בטלפון, וכשסיימתם שלחו כאן את המילה שמרתי.",
+        });
+        updateWhatsappIntent(phone, { state: "awaiting_saved" });
+        return res.status(202).json({ ok: true, contactSent: true, next: "awaiting_saved" });
+      } catch {
+        const current = readWhatsappIntents().find((item) => item.phone === phone);
+        if (current?.state === "sending_contact") {
+          writeWhatsappIntents(readWhatsappIntents().filter((item) => item.phone !== phone));
+        }
+        return res.status(502).json({ error: "raffle contact delivery failed" });
+      }
     }
+
+    if (inboundText === "שמרתי" && intent) {
+      if (intentState === "sending_media") {
+        return res.json({ ok: true, duplicate: true, next: "sending_media" });
+      }
+      if (intentState === "media_sent") {
+        try {
+          await sendViaWpsender({
+            to: phone,
+            type: "text",
+            message: "הקובץ נשלח. העלו אותו לסטטוס, וכשסיימתם שלחו כאן את המילה שיתפתי.",
+          });
+          updateWhatsappIntent(phone, { state: "awaiting_shared" });
+          return res.status(202).json({ ok: true, mediaSent: true, next: "awaiting_shared" });
+        } catch {
+          return res.status(502).json({ error: "raffle media instruction failed" });
+        }
+      }
+      if (intentState !== "awaiting_saved") {
+        return res.json({ ok: true, alreadyAdvanced: true, next: intentState });
+      }
+      updateWhatsappIntent(phone, { state: "sending_media", messageId });
+      try {
+        await sendRaffleMedia(phone);
+        updateWhatsappIntent(phone, { state: "media_sent" });
+        await sendViaWpsender({
+          to: phone,
+          type: "text",
+          message: "הקובץ נשלח. העלו אותו לסטטוס, וכשסיימתם שלחו כאן את המילה שיתפתי.",
+        });
+        updateWhatsappIntent(phone, { state: "awaiting_shared" });
+        return res.status(202).json({ ok: true, mediaSent: true, next: "awaiting_shared" });
+      } catch {
+        const current = readWhatsappIntents().find((item) => item.phone === phone);
+        if (current?.state === "sending_media") {
+          updateWhatsappIntent(phone, { state: "awaiting_saved" });
+        }
+        return res.status(502).json({ error: "raffle media delivery failed" });
+      }
+    }
+
+    if (inboundText === "שיתפתי" && intent) {
+      if (intentState === "sending_proof_prompt") {
+        return res.json({ ok: true, duplicate: true, next: "sending_proof_prompt" });
+      }
+      if (intentState !== "awaiting_shared") {
+        return res.json({ ok: true, alreadyAdvanced: true, next: intentState });
+      }
+      updateWhatsappIntent(phone, { state: "sending_proof_prompt", messageId });
+      try {
+        await sendViaWpsender({
+          to: phone,
+          type: "text",
+          message: "מצוין! עכשיו אנחנו מחכים לצילום מסך שמראה שהסטטוס פעיל. שלחו אותו כאן לבדיקה.",
+        });
+        updateWhatsappIntent(phone, { state: "awaiting_proof" });
+        return res.status(202).json({ ok: true, next: "awaiting_proof" });
+      } catch {
+        updateWhatsappIntent(phone, { state: "awaiting_shared" });
+        return res.status(502).json({ error: "raffle proof instruction failed" });
+      }
+    }
+
+    return res.status(202).json({ ok: true, ignored: true });
   }
+
   if (payload.event !== "message.inbound" || !data.hasMedia || data.mediaType !== "imageMessage") {
     return res.status(202).json({ ok: true, ignored: true });
   }
-  if (!data.messageId || !data.from) {
+  if (!messageId) {
     return res.status(400).json({ error: "missing message data" });
   }
 
   const entries = readEntries();
-  if (entries.some((entry) => entry.proofMessageId === data.messageId)) {
+  if (entries.some((entry) => entry.proofMessageId === messageId)) {
     return res.json({ ok: true, duplicate: true });
   }
 
-  const phone = normalizePhone(String(data.from).split("@")[0]);
-  if (phone.length < 11) return res.status(400).json({ error: "invalid sender phone" });
-
-  const existing = entries.find((entry) => entry.phone === phone);
   const intents = readWhatsappIntents();
   const intent = intents.find((item) => item.phone === phone);
+  if (whatsappIntentState(intent) !== "awaiting_proof") {
+    return res.status(202).json({ ok: true, ignored: true });
+  }
+
+  const existing = entries.find((entry) => entry.phone === phone);
   const proofReceivedAt = data.timestamp || payload.timestamp || new Date().toISOString();
   if (existing) {
-    existing.proofMessageId = String(data.messageId);
+    existing.proofMessageId = messageId;
     existing.proofMimeType = data.mimeType || null;
     existing.proofReceivedAt = proofReceivedAt;
     existing.source = existing.source || "whatsapp";
@@ -318,15 +435,24 @@ app.post("/api/integrations/wpsender/events", async (req, res) => {
       referredBy: intent?.referredBy || null,
       status: "pending_review",
       source: "whatsapp",
-      proofMessageId: String(data.messageId),
+      proofMessageId: messageId,
       proofMimeType: data.mimeType || null,
       proofReceivedAt,
       createdAt: new Date().toISOString(),
     });
   }
   writeEntries(entries);
-  if (intent) writeWhatsappIntents(intents.filter((item) => item.phone !== phone));
-  res.status(202).json({ ok: true, status: existing?.status || "pending_review" });
+  writeWhatsappIntents(intents.filter((item) => item.phone !== phone));
+  try {
+    await sendViaWpsender({
+      to: phone,
+      type: "text",
+      message: "קיבלנו את צילום המסך. הוא ממתין לבדיקה, ואחרי האישור נשלח לך את מספר הכרטיסים וקישור השיתוף האישי.",
+    });
+  } catch (error) {
+    console.error("Proof stored, but pending-review message failed:", error.message);
+  }
+  return res.status(202).json({ ok: true, status: existing?.status || "pending_review" });
 });
 
 /* ============================================================
@@ -408,17 +534,30 @@ app.post("/admin/api/entries/:id/approve", auth, async (req, res) => {
   const entries = readEntries();
   const entry = entries.find((item) => item.id === req.params.id);
   if (!entry) return res.status(404).json({ error: "entry not found" });
-  entry.status = "approved";
-  entry.approvedAt = new Date().toISOString();
+  if (entry.status === "approving") {
+    return res.status(409).json({ error: "approval already in progress" });
+  }
+  const publicBaseUrl = String(process.env.PUBLIC_BASE_URL || "").replace(/\/$/, "");
+  if (!publicBaseUrl) return res.status(503).json({ error: "public URL is not configured" });
+  const referrals = entries.filter((item) => isApprovedEntry(item) && item.referredBy === entry.phone).length;
+  const tickets = 1 + referrals;
+  const previousStatus = entry.status || "pending_review";
+  entry.status = "approving";
   writeEntries(entries);
   try {
     await sendViaWpsender({
       to: entry.phone,
       type: "text",
-      message: `אושר! ${entry.name || ""} נכנסת להגרלה של ${CONFIG.businessName}. בהצלחה!`,
+      message: `אושר! ${entry.name || ""}, אתה בהגרלה של ${CONFIG.businessName}!\nכרטיסים: ${tickets}\nבדיקת כרטיסים: ${publicBaseUrl}/?check=${entry.phone}#check-card\nקישור השיתוף שלך: ${publicBaseUrl}/?ref=${entry.phone}`,
     });
+    entry.status = "approved";
+    entry.approvedAt = new Date().toISOString();
+    entry.confirmationSentAt = new Date().toISOString();
+    writeEntries(entries);
   } catch (error) {
-    console.error("Participant approved, but confirmation message failed:", error.message);
+    entry.status = previousStatus;
+    writeEntries(entries);
+    return res.status(502).json({ error: "approval confirmation failed" });
   }
   res.json({ ok: true, status: entry.status });
 });

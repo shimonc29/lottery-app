@@ -58,13 +58,13 @@ async function sendWebhook(payload, signatureSecret = WEBHOOK_SECRET) {
   });
 }
 
-function proofEvent() {
+function proofEvent(messageId = "proof-message-1") {
   return {
     event: "message.inbound",
     timestamp: "2026-07-14T10:00:00.000Z",
     userId: WPSENDER_USER_ID,
     data: {
-      messageId: "proof-message-1",
+      messageId,
       from: "972501234567@s.whatsapp.net",
       senderName: "Test Participant",
       text: "",
@@ -147,8 +147,8 @@ test("announces the enabled WhatsApp flow to the public page", async () => {
   assert.equal(config.whatsappKeyword, "הגרלה");
 });
 
-test("sends the raffle instructions and contact when a participant writes the keyword", async () => {
-  const response = await sendWebhook({
+test("handles concurrent duplicate keyword webhooks only once", async () => {
+  const keywordEvent = {
     event: "message.inbound",
     timestamp: "2026-07-14T09:30:00.000Z",
     userId: WPSENDER_USER_ID,
@@ -161,24 +161,64 @@ test("sends the raffle instructions and contact when a participant writes the ke
       mimeType: null,
       hasMedia: false,
     },
+  };
+  const responses = await Promise.all([
+    sendWebhook(keywordEvent),
+    sendWebhook(keywordEvent),
+    sendWebhook(keywordEvent),
+  ]);
+  assert.deepEqual(responses.map((response) => response.status).sort(), [200, 200, 202]);
+  assert.deepEqual(await responses.find((response) => response.status === 202).json(), {
+    ok: true,
+    contactSent: true,
+    next: "awaiting_saved",
   });
-  assert.equal(response.status, 202);
-  assert.deepEqual(await response.json(), { ok: true, kitSent: true });
-  assert.equal(sentWpsenderRequests.length, 3);
+  assert.equal(sentWpsenderRequests.length, 2);
   assert.deepEqual(sentWpsenderRequests[0], {
     to: "972501234567",
-    type: "text",
-    message: sentWpsenderRequests[0].message,
-  });
-  assert.match(sentWpsenderRequests[0].message, /צילום מסך/);
-  assert.deepEqual(sentWpsenderRequests[1], {
-    to: "972501234567",
     type: "document",
-    buffer: sentWpsenderRequests[1].buffer,
+    buffer: sentWpsenderRequests[0].buffer,
     mimetype: "text/vcard",
     fileName: "contact.vcf",
   });
-  assert.match(Buffer.from(sentWpsenderRequests[1].buffer, "base64").toString("utf8"), /BEGIN:VCARD/);
+  assert.match(Buffer.from(sentWpsenderRequests[0].buffer, "base64").toString("utf8"), /BEGIN:VCARD/);
+  assert.deepEqual(sentWpsenderRequests[1], {
+    to: "972501234567",
+    type: "text",
+    message: sentWpsenderRequests[1].message,
+  });
+  assert.match(sentWpsenderRequests[1].message, /שמרתי/);
+});
+
+test("ignores a screenshot until the participant completes the text steps", async () => {
+  const requestsBefore = sentWpsenderRequests.length;
+  const response = await sendWebhook(proofEvent("early-proof-message-1"));
+  assert.equal(response.status, 202);
+  assert.deepEqual(await response.json(), { ok: true, ignored: true });
+  assert.equal(sentWpsenderRequests.length, requestsBefore);
+  const entriesPath = path.join(dataDir, "data.json");
+  assert.deepEqual(fs.existsSync(entriesPath) ? JSON.parse(fs.readFileSync(entriesPath, "utf8")) : [], []);
+});
+
+test("sends the configured raffle media only after the participant writes saved", async () => {
+  const response = await sendWebhook({
+    event: "message.inbound",
+    timestamp: "2026-07-14T09:31:00.000Z",
+    userId: WPSENDER_USER_ID,
+    data: {
+      messageId: "saved-message-1",
+      from: "972501234567@s.whatsapp.net",
+      text: "שמרתי",
+      timestamp: 1700000001,
+      mediaType: "conversation",
+      mimeType: null,
+      hasMedia: false,
+    },
+  });
+
+  assert.equal(response.status, 202);
+  assert.deepEqual(await response.json(), { ok: true, mediaSent: true, next: "awaiting_shared" });
+  assert.equal(sentWpsenderRequests.length, 4);
   assert.deepEqual(sentWpsenderRequests[2], {
     to: "972501234567",
     type: "video",
@@ -186,6 +226,97 @@ test("sends the raffle instructions and contact when a participant writes the ke
     mimetype: "video/mp4",
     caption: sentWpsenderRequests[2].caption,
   });
+  assert.deepEqual(sentWpsenderRequests[3], {
+    to: "972501234567",
+    type: "text",
+    message: sentWpsenderRequests[3].message,
+  });
+  assert.match(sentWpsenderRequests[3].message, /שיתפתי/);
+});
+
+test("asks for a screenshot only after the participant writes shared", async () => {
+  const response = await sendWebhook({
+    event: "message.inbound",
+    timestamp: "2026-07-14T09:32:00.000Z",
+    userId: WPSENDER_USER_ID,
+    data: {
+      messageId: "shared-message-1",
+      from: "972501234567@s.whatsapp.net",
+      text: "שיתפתי",
+      timestamp: 1700000002,
+      mediaType: "conversation",
+      mimeType: null,
+      hasMedia: false,
+    },
+  });
+
+  assert.equal(response.status, 202);
+  assert.deepEqual(await response.json(), { ok: true, next: "awaiting_proof" });
+  assert.equal(sentWpsenderRequests.length, 5);
+  assert.match(sentWpsenderRequests[4].message, /צילום מסך/);
+});
+
+test("ignores the raffle keyword when it is sent in a WhatsApp group", async () => {
+  const requestsBefore = sentWpsenderRequests.length;
+  const response = await sendWebhook({
+    event: "message.inbound",
+    timestamp: "2026-07-14T09:35:00.000Z",
+    userId: WPSENDER_USER_ID,
+    data: {
+      messageId: "group-keyword-message-1",
+      from: "120363999999999999@g.us",
+      text: "\u05d4\u05d2\u05e8\u05dc\u05d4",
+      timestamp: 1700000001,
+      mediaType: "conversation",
+      mimeType: null,
+      hasMedia: false,
+    },
+  });
+
+  assert.equal(response.status, 202);
+  assert.deepEqual(await response.json(), { ok: true, ignored: true });
+  assert.equal(sentWpsenderRequests.length, requestsBefore);
+});
+
+test("does not send anything to a private chat that did not write the raffle keyword", async () => {
+  const requestsBefore = sentWpsenderRequests.length;
+  const response = await sendWebhook({
+    event: "message.inbound",
+    timestamp: "2026-07-14T09:36:00.000Z",
+    userId: WPSENDER_USER_ID,
+    data: {
+      messageId: "unrelated-private-message-1",
+      from: "972509999999@s.whatsapp.net",
+      text: "\u05e9\u05dc\u05d5\u05dd",
+      timestamp: 1700000002,
+      mediaType: "conversation",
+      mimeType: null,
+      hasMedia: false,
+    },
+  });
+
+  assert.equal(response.status, 202);
+  assert.deepEqual(await response.json(), { ok: true, ignored: true });
+  assert.equal(sentWpsenderRequests.length, requestsBefore);
+});
+
+test("makes the explanatory text under every step prominent on mobile", async () => {
+  const response = await fetch(`${baseUrl}/`);
+  assert.equal(response.status, 200);
+  const html = await response.text();
+  assert.match(
+    html,
+    /\.step \.sub\s*\{[^}]*font-size:\s*16px[^}]*font-weight:\s*700[^}]*color:\s*var\(--forest\)/s,
+  );
+});
+
+test("supports a direct link that opens the ticket check for a participant", async () => {
+  const response = await fetch(`${baseUrl}/`);
+  assert.equal(response.status, 200);
+  const html = await response.text();
+  assert.match(html, /get\("check"\)/);
+  assert.match(html, /check-phone/);
+  assert.match(html, /check-btn/);
 });
 
 test("stores an incoming screenshot as pending review", async () => {
@@ -209,6 +340,8 @@ test("stores an incoming screenshot as pending review", async () => {
     proofReceivedAt: "2026-07-14T10:00:00.000Z",
     createdAt: entries[0].createdAt,
   });
+  assert.equal(sentWpsenderRequests.length, 6);
+  assert.match(sentWpsenderRequests[5].message, /ממתין לבדיקה/);
 });
 
 test("treats a repeated WPSender message as idempotent", async () => {
@@ -301,11 +434,14 @@ test("an admin approval turns the verified proof into an eligible entry", async 
   const { winner } = await drawResponse.json();
   assert.equal(winner.phone, "972501234567");
 
-  assert.equal(sentWpsenderRequests.length, 4);
-  assert.deepEqual(sentWpsenderRequests[3], {
+  assert.equal(sentWpsenderRequests.length, 7);
+  assert.deepEqual(sentWpsenderRequests[6], {
     to: "972501234567",
     type: "text",
-    message: sentWpsenderRequests[3].message,
+    message: sentWpsenderRequests[6].message,
   });
-  assert.match(sentWpsenderRequests[3].message, /נכנסת להגרלה/);
+  assert.match(sentWpsenderRequests[6].message, /אתה בהגרלה/);
+  assert.match(sentWpsenderRequests[6].message, /כרטיסים: 1/);
+  assert.match(sentWpsenderRequests[6].message, /\?check=972501234567/);
+  assert.match(sentWpsenderRequests[6].message, /\?ref=972501234567/);
 });
