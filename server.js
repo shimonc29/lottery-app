@@ -85,6 +85,10 @@ function normalizePhone(raw) {
   return p;
 }
 
+function isIsraeliWhatsappMobile(phone) {
+  return /^9725\d{8}$/.test(phone);
+}
+
 app.use(express.json({
   verify: (req, _res, buffer) => {
     req.rawBody = Buffer.from(buffer);
@@ -282,7 +286,9 @@ app.post("/api/integrations/wpsender/events", async (req, res) => {
   const raffleKeyword = process.env.WPSENDER_RAFFLE_KEYWORD || "הגרלה";
   const inboundText = String(data.text || "").trim();
   const phone = normalizePhone(senderJid.split("@")[0]);
-  if (phone.length < 11) return res.status(400).json({ error: "invalid sender phone" });
+  if (!isIsraeliWhatsappMobile(phone)) {
+    return res.status(202).json({ ok: true, ignored: true });
+  }
   const messageId = data.messageId ? String(data.messageId) : null;
 
   if (payload.event === "message.inbound" && !data.hasMedia) {

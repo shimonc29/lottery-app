@@ -278,6 +278,28 @@ test("ignores the raffle keyword when it is sent in a WhatsApp group", async () 
   assert.equal(sentWpsenderRequests.length, requestsBefore);
 });
 
+test("rejects a WhatsApp LID disguised as a private phone number", async () => {
+  const requestsBefore = sentWpsenderRequests.length;
+  const response = await sendWebhook({
+    event: "message.inbound",
+    timestamp: "2026-07-14T12:07:00.000Z",
+    userId: WPSENDER_USER_ID,
+    data: {
+      messageId: "disguised-lid-message-1",
+      from: "111140885553296@s.whatsapp.net",
+      text: "\u05d4\u05d2\u05e8\u05dc\u05d4",
+      timestamp: 1700000003,
+      mediaType: "conversation",
+      mimeType: null,
+      hasMedia: false,
+    },
+  });
+
+  assert.equal(response.status, 202);
+  assert.deepEqual(await response.json(), { ok: true, ignored: true });
+  assert.equal(sentWpsenderRequests.length, requestsBefore);
+});
+
 test("does not send anything to a private chat that did not write the raffle keyword", async () => {
   const requestsBefore = sentWpsenderRequests.length;
   const response = await sendWebhook({
