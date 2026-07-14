@@ -299,9 +299,7 @@ app.post("/api/integrations/wpsender/events", async (req, res) => {
     let intentState = whatsappIntentState(intent);
 
     if (isRaffleKeyword) {
-      if (readEntries().some((entry) => entry.phone === phone)) {
-        return res.json({ ok: true, alreadyEntered: true });
-      }
+      const alreadyEntered = readEntries().some((entry) => entry.phone === phone);
       if (intentState === "contact_sent" && intent?.messageId === messageId) {
         try {
           await sendViaWpsender({
@@ -315,26 +313,29 @@ app.post("/api/integrations/wpsender/events", async (req, res) => {
           return res.status(502).json({ error: "raffle contact instruction failed" });
         }
       }
-      if (intent) {
+      if (intent && messageId && intent.messageId === messageId) {
         return res.json({
           ok: true,
-          duplicate: intent.messageId === messageId,
-          alreadyStarted: intent.messageId !== messageId,
+          duplicate: true,
           next: intentState,
         });
       }
 
       const referralMatch = inboundText.match(/\bref=([+\d()-]+)/i);
       const referredBy = referralMatch ? normalizePhone(referralMatch[1]) : null;
-      intent = {
+      const restarted = Boolean(intent || alreadyEntered);
+      const previousIntent = intent ? { ...intent } : null;
+      const now = new Date().toISOString();
+      const nextIntent = {
         phone,
-        referredBy: referredBy && referredBy !== phone ? referredBy : null,
+        referredBy: referredBy && referredBy !== phone ? referredBy : (intent?.referredBy || null),
         messageId,
         state: "sending_contact",
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
+        createdAt: intent?.createdAt || now,
+        updatedAt: now,
       };
-      intents.push(intent);
+      if (intent) Object.assign(intent, nextIntent);
+      else intents.push(nextIntent);
       writeWhatsappIntents(intents);
       try {
         await sendRaffleContact(phone);
@@ -345,11 +346,19 @@ app.post("/api/integrations/wpsender/events", async (req, res) => {
           message: "איש הקשר נשלח. שמרו אותו בטלפון, וכשסיימתם שלחו כאן את המילה שמרתי.",
         });
         updateWhatsappIntent(phone, { state: "awaiting_saved" });
-        return res.status(202).json({ ok: true, contactSent: true, next: "awaiting_saved" });
+        return res.status(202).json({
+          ok: true,
+          contactSent: true,
+          ...(restarted ? { restarted: true } : {}),
+          next: "awaiting_saved",
+        });
       } catch {
-        const current = readWhatsappIntents().find((item) => item.phone === phone);
-        if (current?.state === "sending_contact") {
-          writeWhatsappIntents(readWhatsappIntents().filter((item) => item.phone !== phone));
+        const currentIntents = readWhatsappIntents();
+        const currentIndex = currentIntents.findIndex((item) => item.phone === phone);
+        if (currentIndex !== -1 && currentIntents[currentIndex].state === "sending_contact") {
+          if (previousIntent) currentIntents[currentIndex] = previousIntent;
+          else currentIntents.splice(currentIndex, 1);
+          writeWhatsappIntents(currentIntents);
         }
         return res.status(502).json({ error: "raffle contact delivery failed" });
       }

@@ -467,3 +467,35 @@ test("an admin approval turns the verified proof into an eligible entry", async 
   assert.match(sentWpsenderRequests[6].message, /\?check=972501234567/);
   assert.match(sentWpsenderRequests[6].message, /\?ref=972501234567/);
 });
+
+test("a new raffle keyword restarts the flow for an existing participant", async () => {
+  const requestsBefore = sentWpsenderRequests.length;
+  const response = await sendWebhook({
+    event: "message.inbound",
+    timestamp: "2026-07-14T14:30:00.000Z",
+    userId: WPSENDER_USER_ID,
+    data: {
+      messageId: "keyword-restart-message-1",
+      from: "972501234567@s.whatsapp.net",
+      text: "\u05d4\u05d2\u05e8\u05dc\u05d4",
+      timestamp: 1700000100,
+      mediaType: "conversation",
+      mimeType: null,
+      hasMedia: false,
+    },
+  });
+
+  assert.equal(response.status, 202);
+  assert.deepEqual(await response.json(), {
+    ok: true,
+    contactSent: true,
+    restarted: true,
+    next: "awaiting_saved",
+  });
+  assert.equal(sentWpsenderRequests.length, requestsBefore + 2);
+  assert.equal(sentWpsenderRequests[requestsBefore].type, "document");
+  assert.equal(sentWpsenderRequests[requestsBefore + 1].type, "text");
+
+  const entries = JSON.parse(fs.readFileSync(path.join(dataDir, "data.json"), "utf8"));
+  assert.equal(entries.filter((entry) => entry.phone === "972501234567").length, 1);
+});
