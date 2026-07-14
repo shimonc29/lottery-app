@@ -226,12 +226,16 @@ test("sends the configured raffle media only after the participant writes saved"
     mimetype: "video/mp4",
     caption: sentWpsenderRequests[2].caption,
   });
+  const personalShareLink = `${fakeWpsenderBaseUrl}/?ref=972501234567`;
+  assert.match(sentWpsenderRequests[2].caption, /קישור השיתוף האישי/);
+  assert.ok(sentWpsenderRequests[2].caption.includes(personalShareLink));
   assert.deepEqual(sentWpsenderRequests[3], {
     to: "972501234567",
     type: "text",
     message: sentWpsenderRequests[3].message,
   });
   assert.match(sentWpsenderRequests[3].message, /שיתפתי/);
+  assert.ok(sentWpsenderRequests[3].message.includes(personalShareLink));
 });
 
 test("asks for a screenshot only after the participant writes shared", async () => {

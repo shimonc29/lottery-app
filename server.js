@@ -224,6 +224,17 @@ function getShareMediaUrl() {
   return new URL(configured, `${publicBaseUrl}/`).toString();
 }
 
+function getPersonalShareLink(phone) {
+  const publicBaseUrl = String(process.env.PUBLIC_BASE_URL || "").replace(/\/$/, "");
+  if (!publicBaseUrl) throw new Error("PUBLIC_BASE_URL is required for personal share links");
+  return `${publicBaseUrl}/?ref=${encodeURIComponent(phone)}`;
+}
+
+function getShareInstructions(phone) {
+  const personalShareLink = getPersonalShareLink(phone);
+  return `הקובץ והקישור האישי שלך נשלחו. העלו את שניהם לסטטוס:\n${personalShareLink}\n\nכשתסיימו שלחו כאן את המילה שיתפתי.`;
+}
+
 async function sendRaffleContact(phone) {
   const vcf = [
     "BEGIN:VCARD", "VERSION:3.0",
@@ -259,12 +270,13 @@ async function sendRaffleMedia(phone) {
     ".3gp": "video/3gpp",
   };
   const mimeType = imageMimeTypes[extension] || videoMimeTypes[extension] || "video/mp4";
+  const personalShareLink = getPersonalShareLink(phone);
   await sendViaWpsender({
     to: phone,
     type: mimeType.startsWith("image/") ? "image" : "video",
     mediaUrl,
     mimetype: mimeType.split(";", 1)[0],
-    caption: `שתפו בסטטוס כדי להשתתף בהגרלה של ${CONFIG.businessName}`,
+    caption: `שתפו בסטטוס כדי להשתתף בהגרלה של ${CONFIG.businessName}\n\nקישור השיתוף האישי שלך:\n${personalShareLink}`,
   });
 }
 
@@ -373,7 +385,7 @@ app.post("/api/integrations/wpsender/events", async (req, res) => {
           await sendViaWpsender({
             to: phone,
             type: "text",
-            message: "הקובץ נשלח. העלו אותו לסטטוס, וכשסיימתם שלחו כאן את המילה שיתפתי.",
+            message: getShareInstructions(phone),
           });
           updateWhatsappIntent(phone, { state: "awaiting_shared" });
           return res.status(202).json({ ok: true, mediaSent: true, next: "awaiting_shared" });
@@ -391,7 +403,7 @@ app.post("/api/integrations/wpsender/events", async (req, res) => {
         await sendViaWpsender({
           to: phone,
           type: "text",
-          message: "הקובץ נשלח. העלו אותו לסטטוס, וכשסיימתם שלחו כאן את המילה שיתפתי.",
+          message: getShareInstructions(phone),
         });
         updateWhatsappIntent(phone, { state: "awaiting_shared" });
         return res.status(202).json({ ok: true, mediaSent: true, next: "awaiting_shared" });
