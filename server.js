@@ -201,6 +201,14 @@ async function sendViaWpsender(body) {
   return response.json();
 }
 
+function getShareMediaUrl() {
+  const configured = String(CONFIG.shareMedia || "").trim();
+  if (!configured || /^https?:\/\//i.test(configured)) return configured;
+  const publicBaseUrl = String(process.env.PUBLIC_BASE_URL || "").replace(/\/$/, "");
+  if (!publicBaseUrl) throw new Error("PUBLIC_BASE_URL is required for relative raffle media");
+  return new URL(configured, `${publicBaseUrl}/`).toString();
+}
+
 async function sendRaffleKit(phone) {
   await sendViaWpsender({
     to: phone,
@@ -224,7 +232,7 @@ async function sendRaffleKit(phone) {
   });
 
   if (CONFIG.shareMedia) {
-    const mediaResponse = await fetch(CONFIG.shareMedia, { signal: AbortSignal.timeout(15_000) });
+    const mediaResponse = await fetch(getShareMediaUrl(), { signal: AbortSignal.timeout(15_000) });
     if (!mediaResponse.ok) throw new Error(`Raffle media download failed (${mediaResponse.status})`);
     const mimeType = mediaResponse.headers.get("content-type") || "video/mp4";
     await sendViaWpsender({

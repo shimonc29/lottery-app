@@ -80,6 +80,10 @@ test.before(async () => {
   const fakeWpsenderPort = await getFreePort();
   fakeWpsenderBaseUrl = `http://127.0.0.1:${fakeWpsenderPort}`;
   fakeWpsender = http.createServer(async (req, res) => {
+    if (req.url === "/raffle-media.mp4" && req.method === "GET") {
+      res.writeHead(200, { "content-type": "video/mp4" });
+      return res.end("test-video-bytes");
+    }
     if (req.url === "/api/raffle/send"
         && req.method === "POST"
         && req.headers.authorization === "Bearer test-api-key") {
@@ -112,6 +116,8 @@ test.before(async () => {
       WPSENDER_USER_ID,
       WPSENDER_BASE_URL: fakeWpsenderBaseUrl,
       WPSENDER_API_KEY: "test-api-key",
+      PUBLIC_BASE_URL: fakeWpsenderBaseUrl,
+      SHARE_MEDIA: "/raffle-media.mp4",
       WHATSAPP_FLOW_ENABLED: "true",
       SESSION_SECRET: "test-session-secret",
       ADMIN_USER: "test-admin",
@@ -158,7 +164,7 @@ test("sends the raffle instructions and contact when a participant writes the ke
   });
   assert.equal(response.status, 202);
   assert.deepEqual(await response.json(), { ok: true, kitSent: true });
-  assert.equal(sentWpsenderRequests.length, 2);
+  assert.equal(sentWpsenderRequests.length, 3);
   assert.deepEqual(sentWpsenderRequests[0], {
     to: "972501234567",
     type: "text",
@@ -173,6 +179,13 @@ test("sends the raffle instructions and contact when a participant writes the ke
     fileName: "contact.vcf",
   });
   assert.match(Buffer.from(sentWpsenderRequests[1].buffer, "base64").toString("utf8"), /BEGIN:VCARD/);
+  assert.deepEqual(sentWpsenderRequests[2], {
+    to: "972501234567",
+    type: "video",
+    buffer: Buffer.from("test-video-bytes").toString("base64"),
+    mimetype: "video/mp4",
+    caption: sentWpsenderRequests[2].caption,
+  });
 });
 
 test("stores an incoming screenshot as pending review", async () => {
@@ -288,11 +301,11 @@ test("an admin approval turns the verified proof into an eligible entry", async 
   const { winner } = await drawResponse.json();
   assert.equal(winner.phone, "972501234567");
 
-  assert.equal(sentWpsenderRequests.length, 3);
-  assert.deepEqual(sentWpsenderRequests[2], {
+  assert.equal(sentWpsenderRequests.length, 4);
+  assert.deepEqual(sentWpsenderRequests[3], {
     to: "972501234567",
     type: "text",
-    message: sentWpsenderRequests[2].message,
+    message: sentWpsenderRequests[3].message,
   });
-  assert.match(sentWpsenderRequests[2].message, /נכנסת להגרלה/);
+  assert.match(sentWpsenderRequests[3].message, /נכנסת להגרלה/);
 });
