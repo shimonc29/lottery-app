@@ -104,17 +104,7 @@
   }
   .step.done .num { background: var(--forest); color: var(--gold); }
   .step .title { font-weight: 800; font-size: 17px; margin-bottom: 2px; }
-  .step .sub {
-    font-size: 16px;
-    font-weight: 700;
-    color: var(--forest);
-    line-height: 1.55;
-    margin-top: 7px;
-    padding: 7px 9px;
-    background: rgba(217,164,65,.12);
-    border-right: 3px solid var(--gold);
-    border-radius: 8px;
-  }
+  .step .sub { font-size: 13.5px; color: #5d6b62; }
   .step-btn {
     grid-column: 1 / -1;
     margin-top: 12px;
@@ -347,9 +337,7 @@
 <script>
   const state = { 1: false, 2: false, 3: false };
   let CFG = {};
-  const urlParams = new URLSearchParams(location.search);
-  const urlRef = urlParams.get("ref") || "";
-  const urlCheck = urlParams.get("check") || "";
+  const urlRef = new URLSearchParams(location.search).get("ref") || "";
 
   function markDone(n) {
     if (state[n]) return;
@@ -369,16 +357,7 @@
     document.getElementById("biz").textContent = cfg.businessName;
     document.getElementById("biz2").textContent = cfg.businessName;
     document.getElementById("prize").textContent = cfg.prizeText;
-    if (cfg.whatsappFlowEnabled) {
-      const startButton = document.getElementById("btn-channel");
-      document.querySelector("#step1 .title").textContent = "התחילו את ההשתתפות בוואטסאפ 💬";
-      document.querySelector("#step1 .sub").textContent = "שלחו את מילת ההגרלה וקבלו מיד את איש הקשר והסרטון או התמונה לשיתוף";
-      startButton.textContent = "פתיחה בוואטסאפ";
-      const startText = (cfg.whatsappKeyword || "הגרלה") + (urlRef ? " ref=" + urlRef : "");
-      startButton.href = "https://wa.me/" + cfg.clientPhone + "?text=" + encodeURIComponent(startText);
-      document.querySelector("#step2 .sub").textContent = "פתחו בוואטסאפ את קובץ איש הקשר שקיבלתם ושמרו אותו. הכפתור הוא גיבוי להורדה ישירה";
-      document.querySelector(".form-card").style.display = "none";
-    } else if (cfg.shareMedia) {
+    if (cfg.shareMedia) {
       const btn = document.getElementById("btn-channel");
       btn.textContent = "📤 שתפו לסטטוס";
       btn.removeAttribute("href");
@@ -435,10 +414,6 @@
     if (cfg.heroImage) {
       document.getElementById("hero-image").src = cfg.heroImage;
       document.getElementById("hero-image-wrap").style.display = "block";
-    }
-    if (urlCheck) {
-      document.getElementById("check-phone").value = urlCheck;
-      document.getElementById("check-btn").click();
     }
   });
 
