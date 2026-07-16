@@ -253,8 +253,8 @@
         <div class="step" id="step1">
           <div class="num">1</div>
           <div>
-            <div class="title">העלו את הסרטון לסטטוס 📢</div>
-            <div class="sub">שתפו את הסרטון בסטטוס הוואטסאפ שלכם</div>
+            <div class="title" id="step1-title">העלו את התוכן לסטטוס 📢</div>
+            <div class="sub" id="step1-sub">שתפו בסטטוס הוואטסאפ שלכם</div>
           </div>
           <a class="step-btn" id="btn-channel" target="_blank" rel="noopener">לסרטון</a>
           <span class="check">✓ סומן כבוצע</span>
@@ -358,6 +358,10 @@
     document.getElementById("biz2").textContent = cfg.businessName;
     document.getElementById("prize").textContent = cfg.prizeText;
     if (cfg.shareMedia) {
+      const isVideo = cfg.shareMedia.match(/\.(mp4|mov|webm|avi)$/i);
+      const mediaWord = isVideo ? "הסרטון" : "התמונה";
+      document.getElementById("step1-title").textContent = "העלו את " + mediaWord + " לסטטוס 📢";
+      document.getElementById("step1-sub").textContent = "שתפו את " + mediaWord + " בסטטוס הוואטסאפ שלכם";
       const btn = document.getElementById("btn-channel");
       btn.textContent = "📤 שתפו לסטטוס";
       btn.removeAttribute("href");
